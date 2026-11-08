@@ -158,6 +158,14 @@ pub fn add_highlight(
     Ok(annot_id)
 }
 
+fn object_as_f32(obj: &Object) -> f32 {
+    match obj {
+        Object::Real(v) => *v,
+        Object::Integer(v) => *v as f32,
+        _ => 0.0,
+    }
+}
+
 fn rect_object(doc: &Document, obj: &Object) -> Option<Rect> {
     match obj {
         Object::Array(arr) if arr.len() >= 4 => {

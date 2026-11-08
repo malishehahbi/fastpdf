@@ -109,6 +109,7 @@ fn push_span(spans: &mut Vec<TextSpan>, text: &str, ts: &TextState, ctm: [f32; 6
         height: ts.font_size,
         y_top: 0.0,
         font_size: ts.font_size,
+        ..Default::default()
     });
 }
 

@@ -61,7 +61,7 @@ pub struct LinkDto {
     pub page_index: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextSpan {
     pub text: String,
@@ -76,6 +76,12 @@ pub struct TextSpan {
     /// Typographic size in view points (em height).
     #[serde(default)]
     pub font_size: f32,
+    #[serde(default)]
+    pub space_before: bool,
+    #[serde(default)]
+    pub line_break_before: bool,
+    #[serde(default)]
+    pub rtl: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

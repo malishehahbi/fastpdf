@@ -1,4 +1,5 @@
-use crate::types::{Rect, SearchMatch, TextSpan};
+use crate::text_layout::find_unicode_ranges;
+use crate::types::{SearchMatch, TextSpan};
 
 pub fn search_pages(pages_text: &[(u32, String)], query: &str) -> Vec<SearchMatch> {
     if query.is_empty() {
@@ -15,44 +16,24 @@ pub fn search_page_text(page_index: u32, text: &str, query: &str) -> Vec<SearchM
     if query.is_empty() {
         return vec![];
     }
-    let q = query.to_lowercase();
-    let lower = text.to_lowercase();
+    let chars: Vec<char> = text.chars().collect();
     let mut matches = Vec::new();
-    let mut start = 0;
-    while let Some(pos) = lower[start..].find(&q) {
-        let abs = start + pos;
-        let end = abs + q.len();
-        let snippet = text
-            .chars()
-            .skip(abs.saturating_sub(20))
-            .take(q.len() + 40)
-            .collect();
+    for range in find_unicode_ranges(text, query) {
+        let snippet_start = range.start.saturating_sub(20);
+        let snippet_end = (range.end + 20).min(chars.len());
+        let snippet: String = chars[snippet_start..snippet_end].iter().collect();
         matches.push(SearchMatch {
             page_index,
-            start: abs,
-            end,
+            start: range.start,
+            end: range.end,
             snippet,
             rects: Vec::new(),
         });
-        start = abs + 1;
     }
     matches
 }
 
-/// Highlight rects for spans whose text contains `query` (hayro glyph boxes).
-pub fn rects_for_query(spans: &[TextSpan], query: &str) -> Vec<Rect> {
-    if query.is_empty() {
-        return vec![];
-    }
-    let q = query.to_lowercase();
-    spans
-        .iter()
-        .filter(|s| s.text.to_lowercase().contains(&q))
-        .map(|s| Rect {
-            x: s.x,
-            y: s.y,
-            width: s.width,
-            height: s.height,
-        })
-        .collect()
+/// Highlight rects for hayro spans (uses layout-aware plain text).
+pub fn rects_for_query(spans: &[TextSpan], query: &str) -> Vec<crate::types::Rect> {
+    crate::text_layout::rects_for_query(spans, query)
 }

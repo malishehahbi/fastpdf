@@ -30,6 +30,8 @@ const searchResults = document.getElementById('searchResults');
 const searchBtn = document.getElementById('searchBtn');
 const measureCtx = document.createElement('canvas').getContext('2d');
 
+const ARABIC = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
 function showError(message) {
   errorEl.hidden = !message;
   errorEl.textContent = message ?? '';
@@ -82,78 +84,87 @@ function paintHighlights() {
 }
 
 /**
- * Group hayro glyphs into horizontal runs (pdf.js-style) for selection alignment.
  * @param {import('@fastpdf/core').TextSpan[]} spans
  */
-function mergeTextRuns(spans) {
-  if (!spans.length) return [];
+function groupLines(spans) {
   const sorted = [...spans].sort((a, b) => {
-    const yt = (a.yTop ?? 0) - (b.yTop ?? 0);
-    if (Math.abs(yt) > 1.5) return yt;
+    const dy = (a.yTop ?? 0) - (b.yTop ?? 0);
+    if (Math.abs(dy) > 2) return dy;
     return a.x - b.x;
   });
-  const runs = [];
-  const tol = 2.0;
-  for (const span of sorted) {
-    const yTop = span.yTop ?? 0;
-    const fontSize = span.fontSize || span.height || 12;
-    const last = runs[runs.length - 1];
-    if (
-      last &&
-      Math.abs(last.yTop - yTop) <= tol &&
-      Math.abs(last.fontSize - fontSize) <= Math.max(1, fontSize * 0.25)
-    ) {
-      last.text += span.text;
-      const right = span.x + span.width;
-      const lastRight = last.x + last.width;
-      last.width = Math.max(lastRight, right) - last.x;
-      last.height = Math.max(last.height, span.height);
-      last.fontSize = Math.max(last.fontSize, fontSize);
+  /** @type {{ yTop: number; rtl: boolean; spans: import('@fastpdf/core').TextSpan[] }[]} */
+  const lines = [];
+  for (const s of sorted) {
+    const yTop = s.yTop ?? 0;
+    const lh = s.fontSize || s.height || 12;
+    const last = lines[lines.length - 1];
+    if (!last || Math.abs(last.yTop - yTop) > lh * 0.45) {
+      lines.push({ yTop, rtl: !!s.rtl, spans: [s] });
     } else {
-      runs.push({
-        text: span.text,
-        x: span.x,
-        y: span.y,
-        width: span.width,
-        height: span.height,
-        yTop,
-        fontSize,
-      });
+      last.spans.push(s);
+      if (s.rtl) last.rtl = true;
     }
   }
-  return runs;
+  for (const line of lines) {
+    line.spans.sort((a, b) => (line.rtl ? b.x - a.x : a.x - b.x));
+  }
+  return lines;
 }
 
-function layoutTextSpan(el, run) {
-  const left = run.x * scale;
-  const top = (run.yTop > 0 ? run.yTop : pageView.height - run.y - run.height) * scale;
-  const width = Math.max(1, run.width * scale);
-  const height = Math.max(1, run.fontSize * scale);
-  el.textContent = run.text;
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
-  el.style.width = `${width}px`;
-  el.style.height = `${height}px`;
-  el.style.fontSize = `${height}px`;
-  el.style.lineHeight = '1';
-  if (measureCtx && run.text.length > 0) {
-    measureCtx.font = `${height}px sans-serif`;
-    const natural = measureCtx.measureText(run.text).width;
-    if (natural > 1 && width / natural > 0.55 && width / natural < 4) {
-      el.style.transform = `scaleX(${width / natural})`;
-      el.style.transformOrigin = '0% 0%';
-    }
+function unionSpanBox(spans) {
+  let x0 = Infinity;
+  let yTop = Infinity;
+  let x1 = -Infinity;
+  let yBottom = -Infinity;
+  let fontSize = 8;
+  for (const s of spans) {
+    const top = s.yTop > 0 ? s.yTop : pageView.height - s.y - s.height;
+    const bottom = top + (s.fontSize || s.height);
+    x0 = Math.min(x0, s.x);
+    x1 = Math.max(x1, s.x + s.width);
+    yTop = Math.min(yTop, top);
+    yBottom = Math.max(yBottom, bottom);
+    fontSize = Math.max(fontSize, s.fontSize || s.height);
   }
+  return { x: x0, yTop, width: x1 - x0, height: yBottom - yTop, fontSize };
 }
 
 function buildTextLayer(spans) {
   textLayer.replaceChildren();
   textLayer.style.width = `${canvas.width}px`;
   textLayer.style.height = `${canvas.height}px`;
-  const runs = mergeTextRuns(spans);
-  for (const run of runs) {
+  for (const line of groupLines(spans)) {
+    let text = '';
+    for (const s of line.spans) {
+      if (s.spaceBefore) text += ' ';
+      text += s.text;
+    }
+  if (!text.trim()) continue;
+
+    const box = unionSpanBox(line.spans);
     const el = document.createElement('span');
-    layoutTextSpan(el, run);
+    el.textContent = text;
+    const left = box.x * scale;
+    const top = box.yTop * scale;
+    const width = Math.max(1, box.width * scale);
+    const height = Math.max(1, box.fontSize * scale);
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.width = `${width}px`;
+    el.style.height = `${height}px`;
+    el.style.fontSize = `${height}px`;
+    el.style.lineHeight = `${height}px`;
+    el.style.direction = line.rtl ? 'rtl' : 'ltr';
+    el.style.unicodeBidi = 'plaintext';
+    const complex = line.rtl || ARABIC.test(text);
+    if (!complex && measureCtx && text.length > 1) {
+      measureCtx.font = `${height}px sans-serif`;
+      const natural = measureCtx.measureText(text).width;
+      if (natural > 1 && width / natural > 0.55 && width / natural < 3.5) {
+        el.style.transform = `scaleX(${width / natural})`;
+        el.style.transformOrigin = line.rtl ? '100% 0%' : '0% 0%';
+      }
+    }
     textLayer.appendChild(el);
   }
 }
@@ -182,7 +193,7 @@ async function renderCurrent() {
     canvas.style.cursor = 'default';
     canvas.dataset.links = JSON.stringify(links);
 
-    status.textContent = `Rendered ${image.width}×${image.height} px · ${spans.length} glyphs → ${mergeTextRuns(spans).length} lines`;
+    status.textContent = `Rendered ${image.width}×${image.height} px · ${groupLines(spans).length} text lines`;
     updatePager();
   } catch (err) {
     console.error(err);
@@ -243,8 +254,7 @@ function renderOutline(items, depth = 0) {
 }
 
 function applyHighlightsForCurrentPage() {
-  const onPage = lastSearchHits.filter((h) => h.pageIndex === page);
-  activeHighlights = onPage.flatMap((h) => h.rects ?? []);
+  activeHighlights = lastSearchHits.filter((h) => h.pageIndex === page).flatMap((h) => h.rects ?? []);
   paintHighlights();
 }
 
@@ -280,8 +290,18 @@ async function runSearch() {
   try {
     lastSearchHits = doc.search(q);
     renderSearchResults(lastSearchHits);
-    applyHighlightsForCurrentPage();
-    status.textContent = `${lastSearchHits.length} match(es) for “${q}”`;
+    if (lastSearchHits.length === 0) {
+      status.textContent = `No matches for “${q}”`;
+    } else {
+      status.textContent = `${lastSearchHits.length} match(es) for “${q}”`;
+      const onPage = lastSearchHits.some((h) => h.pageIndex === page);
+      if (!onPage) {
+        page = lastSearchHits[0].pageIndex;
+        await renderCurrent();
+      } else {
+        applyHighlightsForCurrentPage();
+      }
+    }
   } finally {
     searchBtn.disabled = false;
     searchBtn.textContent = 'Find';

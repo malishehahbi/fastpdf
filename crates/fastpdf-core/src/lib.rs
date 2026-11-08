@@ -13,6 +13,7 @@ mod render;
 mod search;
 mod security;
 mod text;
+mod text_layout;
 mod types;
 
 pub use document::FastPdfDocument;

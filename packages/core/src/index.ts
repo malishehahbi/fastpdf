@@ -38,6 +38,9 @@ export type TextSpan = {
   height: number;
   yTop?: number;
   fontSize?: number;
+  spaceBefore?: boolean;
+  lineBreakBefore?: boolean;
+  rtl?: boolean;
 };
 
 export type PageViewSize = { width: number; height: number };

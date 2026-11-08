@@ -79,6 +79,7 @@ impl Device<'_> for SpanDevice {
             height: pdf.height.max(0.5),
             y_top: y_view_top,
             font_size,
+            ..Default::default()
         });
     }
 

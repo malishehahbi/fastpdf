@@ -193,7 +193,7 @@ impl FastPdfDocument {
             return Ok(cached.clone());
         }
         self.ensure_hayro()?;
-        let spans = if let Some(session) = &self.hayro {
+        let mut spans = if let Some(session) = &self.hayro {
             let spans = session.text_spans(index as usize)?;
             if !spans.is_empty() {
                 spans
@@ -205,6 +205,7 @@ impl FastPdfDocument {
             let id = page::page_id(&self.pages, index)?;
             text::extract_text_spans(&self.doc, id)?
         };
+        crate::text_layout::annotate_layout(&mut spans);
         self.span_cache.insert(index, spans.clone());
         Ok(spans)
     }
@@ -215,7 +216,11 @@ impl FastPdfDocument {
     }
 
     pub fn page_text(&mut self, index: u32) -> Result<String> {
-        self.lopdf_page_text(index)
+        let spans = self.text_spans(index)?;
+        if spans.is_empty() {
+            return self.lopdf_page_text(index);
+        }
+        Ok(crate::text_layout::plain_text(&spans))
     }
 
     fn ensure_pages_text(&mut self) -> Result<&[(u32, String)]> {

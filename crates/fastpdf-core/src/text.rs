@@ -1,4 +1,5 @@
 use crate::error::{FastPdfError, Result};
+use crate::pdf_num::object_as_f32;
 use crate::types::TextSpan;
 use lopdf::content::{Content, Operation};
 use lopdf::{Document, Object, ObjectId};
@@ -46,11 +47,11 @@ pub fn extract_text_spans(doc: &Document, page_id: ObjectId) -> Result<Vec<TextS
                 text_state.tm = op_matrix(&operands);
             }
             "Tf" if operands.len() >= 2 => {
-                text_state.font_size = operands[1].as_f32().unwrap_or(12.0);
+                text_state.font_size = object_as_f32(&operands[1]).max(1.0);
             }
             "Td" | "TD" if operands.len() >= 2 => {
-                let tx = operands[0].as_f32().unwrap_or(0.0);
-                let ty = operands[1].as_f32().unwrap_or(0.0);
+                let tx = object_as_f32(&operands[0]);
+                let ty = object_as_f32(&operands[1]);
                 text_state.tm = mul_matrix(text_state.tm, [1.0, 0.0, 0.0, 1.0, tx, ty]);
             }
             "Tj" if !operands.is_empty() => {
@@ -122,12 +123,12 @@ fn pdf_string_decode(bytes: &[u8]) -> String {
 
 fn op_matrix(ops: &[Object]) -> [f32; 6] {
     [
-        ops[0].as_f32().unwrap_or(1.0),
-        ops[1].as_f32().unwrap_or(0.0),
-        ops[2].as_f32().unwrap_or(0.0),
-        ops[3].as_f32().unwrap_or(1.0),
-        ops[4].as_f32().unwrap_or(0.0),
-        ops[5].as_f32().unwrap_or(0.0),
+        object_as_f32(&ops[0]),
+        object_as_f32(&ops[1]),
+        object_as_f32(&ops[2]),
+        object_as_f32(&ops[3]),
+        object_as_f32(&ops[4]),
+        object_as_f32(&ops[5]),
     ]
 }
 

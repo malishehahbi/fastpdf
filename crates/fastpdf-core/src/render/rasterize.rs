@@ -1,6 +1,8 @@
 use crate::error::{FastPdfError, Result};
+use crate::render::fonts::{default_font, draw_text_on_pixmap, font_from_bytes};
 use crate::render::interpreter::DisplayItem;
-use tiny_skia::{Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use ab_glyph::FontArc;
+use tiny_skia::{Paint, PathBuilder, Pixmap, Stroke, Transform};
 
 pub fn rasterize(
     items: &[DisplayItem],
@@ -56,6 +58,9 @@ fn rasterize_region(
 
     let flip = Transform::from_row(1.0, 0.0, 0.0, -1.0, 0.0, page_height);
     let region_offset = Transform::from_translate(-region_x * scale, -(page_height - region_y - region_h) * scale);
+    let view_scale = Transform::from_scale(scale, scale).pre_concat(region_offset);
+
+    let default = default_font();
 
     for item in items {
         match item {
@@ -73,7 +78,7 @@ fn rasterize_region(
                         &p,
                         &paint,
                         tiny_skia::FillRule::Winding,
-                        Transform::from_scale(scale, scale).pre_concat(region_offset),
+                        view_scale,
                         None,
                     );
                 }
@@ -92,13 +97,7 @@ fn rasterize_region(
                         width: width * scale,
                         ..Default::default()
                     };
-                    pixmap.stroke_path(
-                        &p,
-                        &paint,
-                        &stroke,
-                        Transform::from_scale(scale, scale).pre_concat(region_offset),
-                        None,
-                    );
+                    pixmap.stroke_path(&p, &paint, &stroke, view_scale, None);
                 }
             }
             DisplayItem::Image {
@@ -109,10 +108,12 @@ fn rasterize_region(
             } => {
                 if let Some(size) = tiny_skia::IntSize::from_wh(*width, *height) {
                     if let Some(src) = Pixmap::from_vec(pixels.clone(), size) {
+                        // PDF paints images into a 1×1 unit square mapped by the CTM at Do.
+                        let img_norm = Transform::from_scale(1.0 / *width as f32, 1.0 / *height as f32);
                         let transform = flip
                             .pre_concat(mul_skia(*ctm))
-                            .pre_concat(Transform::from_scale(scale, scale))
-                            .pre_concat(region_offset);
+                            .pre_concat(img_norm)
+                            .pre_concat(view_scale);
                         pixmap.draw_pixmap(
                             0,
                             0,
@@ -124,24 +125,32 @@ fn rasterize_region(
                     }
                 }
             }
-            DisplayItem::Text { text, ctm, size, color } => {
-                let mut paint = Paint::default();
-                paint.set_color_rgba8(
-                    (color[0] * 255.0) as u8,
-                    (color[1] * 255.0) as u8,
-                    (color[2] * 255.0) as u8,
-                    255,
-                );
-                let x = ctm[4];
-                let y = ctm[5];
-                if let Some(rect) = Rect::from_xywh(
-                    x * scale - region_x * scale,
-                    (page_height - y - size) * scale - (page_height - region_y - region_h) * scale,
-                    text.len() as f32 * size * 0.45 * scale,
-                    size * scale,
-                ) {
-                    pixmap.fill_rect(rect, &paint, Transform::identity(), None);
+            DisplayItem::Text {
+                text,
+                ctm,
+                size,
+                color,
+                font_embed,
+            } => {
+                let embedded = font_embed
+                    .as_ref()
+                    .and_then(|b| font_from_bytes(b.clone()));
+                let font: &FontArc = embedded.as_ref().unwrap_or(default);
+                let mut rgb = *color;
+                if rgb[0] + rgb[1] + rgb[2] > 2.85 {
+                    rgb = [0.05, 0.05, 0.05];
                 }
+                draw_text_on_pixmap(
+                    &mut pixmap,
+                    text,
+                    ctm[4],
+                    ctm[5],
+                    *size,
+                    rgb,
+                    page_height,
+                    scale,
+                    font,
+                );
             }
         }
     }

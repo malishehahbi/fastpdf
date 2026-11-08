@@ -4,6 +4,7 @@ mod annotation;
 mod cache;
 mod document;
 mod error;
+mod pdf_num;
 mod form;
 mod info;
 mod outline;

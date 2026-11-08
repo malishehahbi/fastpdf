@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Pure Rust PDF engine core for FastPDF"
+build = "build.rs"
 
 [dependencies]
 lopdf.workspace = true

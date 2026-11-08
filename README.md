@@ -221,7 +221,7 @@ export class PdfViewerComponent implements OnChanges {
 ### SSR / bundler notes
 
 - Use **dynamic `import()`** for `@fastpdf/core` on server-rendered routes; WASM only runs in the browser (or Node with wasm support).
-- Vite: put WASM assets in `assetsInclude` if needed; copy `pkg/*.wasm` to `public/`.
+- **Vite:** install `vite-plugin-wasm` and add it to `vite.config.js` (see `examples/vanilla`). The wasm-pack `bundler` output imports `.wasm` as ESM; Vite does not support that without this plugin.
 - Next.js: load the viewer with `dynamic(() => import('./PdfViewer'), { ssr: false })`.
 
 ## Planned feature surface

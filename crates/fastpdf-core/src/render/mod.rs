@@ -1,3 +1,5 @@
+mod fonts;
+mod image_decode;
 mod interpreter;
 mod rasterize;
 

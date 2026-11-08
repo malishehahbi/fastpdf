@@ -1,3 +1,4 @@
+/crates/fastpdf-core/assets/fonts/*.ttf
 /target/
 **/pkg/
 node_modules/

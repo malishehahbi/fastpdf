@@ -1,0 +1,18 @@
+[package]
+name = "fastpdf-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pure Rust PDF engine core for FastPDF"
+
+[dependencies]
+lopdf.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tiny-skia.workspace = true
+image.workspace = true
+ab_glyph.workspace = true
+log.workspace = true
+
+[dev-dependencies]

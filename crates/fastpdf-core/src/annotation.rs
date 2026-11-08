@@ -50,7 +50,7 @@ fn annotation_from_dict(
         .get(b"Contents")
         .ok()
         .and_then(|o| match o {
-            Object::String(b, _) => Some(String::from_utf8_lossy(b).into_owned()),
+            Object::String(b, _) => Some(crate::pdf_num::decode_pdf_text_string(b)),
             _ => None,
         });
     let flags = ann

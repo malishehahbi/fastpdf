@@ -1,4 +1,5 @@
 use crate::error::{FastPdfError, Result};
+use crate::pdf_num::decode_object_text_string;
 use crate::types::{PageInfo, Rect};
 use lopdf::{Document, Object, ObjectId};
 use std::collections::BTreeMap;
@@ -19,13 +20,13 @@ pub fn page_info(doc: &Document, pages: &BTreeMap<u32, ObjectId>, index: u32) ->
     let dict = doc
         .get_dictionary(id)
         .map_err(|e| FastPdfError::Lopdf(e.to_string()))?;
-    let (w, h) = media_box_size(doc, &dict)?;
+    let (w, h) = media_box_size(doc, id)?;
     let rotation = dict
         .get(b"Rotate")
         .ok()
         .and_then(|o| o.as_i64().ok())
         .unwrap_or(0) as u32;
-    let label = None; // filled by document via page labels pass
+    let label = None;
     Ok(PageInfo {
         index,
         width: w,
@@ -35,20 +36,32 @@ pub fn page_info(doc: &Document, pages: &BTreeMap<u32, ObjectId>, index: u32) ->
     })
 }
 
-pub fn media_box_size(doc: &Document, page_dict: &lopdf::Dictionary) -> Result<(f32, f32)> {
-    let box_obj = page_dict
-        .get(b"MediaBox")
-        .or_else(|_| page_dict.get(b"CropBox"))
-        .map_err(|_| FastPdfError::CorruptPdf("page missing MediaBox".into()))?;
-    rect_from_object(doc, box_obj).map(|r| (r.width, r.height))
+/// MediaBox dimensions in PDF points, inheriting from ancestor `/Pages` nodes when absent on the page.
+pub fn media_box_size(doc: &Document, page_id: ObjectId) -> Result<(f32, f32)> {
+    page_box(doc, page_id).map(|r| (r.width, r.height))
 }
 
-pub fn page_rect(doc: &Document, page_dict: &lopdf::Dictionary) -> Result<Rect> {
-    let box_obj = page_dict
-        .get(b"MediaBox")
-        .or_else(|_| page_dict.get(b"CropBox"))
-        .map_err(|_| FastPdfError::CorruptPdf("page missing MediaBox".into()))?;
-    rect_from_object(doc, box_obj)
+pub fn page_rect(doc: &Document, page_id: ObjectId) -> Result<Rect> {
+    page_box(doc, page_id)
+}
+
+fn page_box(doc: &Document, page_id: ObjectId) -> Result<Rect> {
+    inherited_rect(doc, page_id, b"MediaBox")
+        .or_else(|| inherited_rect(doc, page_id, b"CropBox"))
+        .ok_or_else(|| FastPdfError::CorruptPdf("page missing MediaBox".into()))
+}
+
+fn inherited_rect(doc: &Document, mut node_id: ObjectId, key: &[u8]) -> Option<Rect> {
+    loop {
+        let dict = doc.get_dictionary(node_id).ok()?;
+        if let Ok(obj) = dict.get(key) {
+            if let Ok(r) = rect_from_object(doc, obj) {
+                return Some(r);
+            }
+        }
+        let parent = dict.get(b"Parent").ok().and_then(|o| o.as_reference().ok())?;
+        node_id = parent;
+    }
 }
 
 fn object_as_f32(obj: &Object) -> f32 {
@@ -110,10 +123,7 @@ pub fn resolve_page_labels(doc: &Document, pages: &BTreeMap<u32, ObjectId>) -> B
             let prefix = spec
                 .get(b"P")
                 .ok()
-                .and_then(|o| match o {
-                    Object::String(b, _) => Some(String::from_utf8_lossy(b).into_owned()),
-                    _ => None,
-                })
+                .and_then(decode_object_text_string)
                 .unwrap_or_default();
             let style = spec.get(b"S").ok().and_then(|o| o.as_name().ok());
             let mut n = spec.get(b"St").ok().and_then(|o| o.as_i64().ok()).unwrap_or(1) as u32;
@@ -170,4 +180,40 @@ fn alpha(mut n: u32, upper: bool) -> String {
         n /= 26;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lopdf::{dictionary, Object};
+
+    #[test]
+    fn media_box_inherited_from_pages_node() {
+        let mut doc = Document::with_version("1.7");
+        let pages_id = doc.new_object_id();
+        let page_id = doc.new_object_id();
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![Object::Reference(page_id)],
+                "Count" => 1,
+                "MediaBox" => vec![
+                    Object::Integer(0),
+                    Object::Integer(0),
+                    Object::Integer(400),
+                    Object::Integer(600),
+                ],
+            }),
+        );
+        doc.objects.insert(
+            page_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Page",
+                "Parent" => Object::Reference(pages_id),
+            }),
+        );
+        let (w, h) = media_box_size(&doc, page_id).unwrap();
+        assert_eq!((w, h), (400.0, 600.0));
+    }
 }

@@ -1,4 +1,5 @@
 use crate::error::{FastPdfError, Result};
+use crate::pdf_num::decode_object_text_string;
 use crate::types::OutlineItem;
 use lopdf::{Document, Object, ObjectId};
 use std::collections::BTreeMap;
@@ -37,10 +38,7 @@ pub fn build_outline(doc: &Document, pages: &BTreeMap<u32, ObjectId>) -> Result<
             let title = item
                 .get(b"Title")
                 .ok()
-                .and_then(|o| match o {
-                    Object::String(b, _) => Some(String::from_utf8_lossy(b).into_owned()),
-                    _ => None,
-                })
+                .and_then(decode_object_text_string)
                 .unwrap_or_default();
             let page_index = resolve_dest_page(doc, &item, pages);
             let mut children = Vec::new();
@@ -74,10 +72,7 @@ fn collect_outline_children(
             let title = item
                 .get(b"Title")
                 .ok()
-                .and_then(|o| match o {
-                    Object::String(b, _) => Some(String::from_utf8_lossy(b).into_owned()),
-                    _ => None,
-                })
+                .and_then(decode_object_text_string)
                 .unwrap_or_default();
             let page_index = resolve_dest_page(doc, &item, pages);
             let mut children = Vec::new();

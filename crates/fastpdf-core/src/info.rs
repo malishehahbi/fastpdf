@@ -1,4 +1,3 @@
-use crate::pdf_num::decode_pdf_text_string;
 use crate::types::DocumentInfo;
 use lopdf::{Document, Object};
 
@@ -30,9 +29,5 @@ pub fn extract_info(doc: &Document) -> DocumentInfo {
 }
 
 fn string_obj(obj: &Object) -> Option<String> {
-    match obj {
-        Object::String(bytes, _) => Some(decode_pdf_text_string(bytes)),
-        Object::Name(name) => Some(String::from_utf8_lossy(name).into_owned()),
-        _ => None,
-    }
+    crate::pdf_num::decode_object_text_string(obj)
 }

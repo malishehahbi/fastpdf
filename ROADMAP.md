@@ -1,269 +1,185 @@
 # FastPDF Roadmap
 
-This document is the build plan for a **pure Rust** PDF engine targeting **WASM** and **framework-agnostic** JavaScript bindings. Timelines are indicative; adjust per contributor capacity.
+FastPDF is a **pure Rust** PDF engine for **WASM** and **embeddable JS** (React, Vue, Svelte, Angular, vanilla). The plan follows the same *layered* idea as [PdfCraft](https://github.com/storytold/pdfcraft): separate **render**, **edit/model**, and **bindings**, and use a production rasterizer (hayro) instead of reinventing PDF painting.
 
 **Legend:** ✅ done · 🚧 in progress · ⬜ not started
 
-**Status (v0.1.0):** Phases 0–7 have **baseline implementations** in the repo (Rust core, WASM, `@fastpdf/core`, CLI, examples). Rendering, fonts, and full PDF 1.7 coverage remain incremental hardening—not every exit criterion in the tables below is production-grade yet. See [docs/architecture.md](./docs/architecture.md).
+**Current stage:** alpha **0.2.x** — faithful viewing via hayro; edit/save via lopdf.
 
 ---
 
-## Executive summary
+## Architecture (PdfCraft-inspired)
 
-| Phase | Focus | Outcome |
-|-------|--------|---------|
-| **0** | Scaffold | Workspace, CI, empty WASM loads in browser |
-| **1** | Parse & model | Open PDF, pages, metadata, outlines |
-| **2** | Render MVP | Page bitmap in WASM, canvas demo |
-| **3** | Reader UX | Text layer, search, links, rotation |
-| **4** | Annotations | Read + hit-test; then author/edit |
-| **5** | Forms & security | AcroForm, passwords, permissions |
-| **6** | Performance | Tiles, workers, streaming, memory caps |
-| **7** | Ecosystem | React/Vue packages, docs site, 1.0 |
+PdfCraft splits concerns so the core never depends on a UI. FastPDF targets a smaller subset, same discipline:
 
-Pure Rust **rendering** is the longest pole; the roadmap front-loads parse/outline work and delivers a visible render path early, then deepens spec coverage.
+| Layer | FastPDF today | Target crate (future) | Responsibility |
+|-------|---------------|----------------------|----------------|
+| **Raster** | ✅ `hayro` in `fastpdf-core::render` | `fastpdf-render` | Page pixels, tiles, thumbnails, (later) hayro text device |
+| **Model / edit** | ✅ `lopdf` in `fastpdf-core` | `fastpdf-model` | Open, outlines, annots, AcroForm, incremental save |
+| **Wasm / JS** | ✅ `fastpdf-wasm`, `@fastpdf/core` | `packages/core` | Stable TS API, framework-agnostic |
+| **Engine façade** | 🚧 `FastPdfDocument` | `fastpdf-engine` | Sessions, cache, passwords, one API for all frontends |
+| **Filters / crypt** | ⬜ via lopdf/hayro | optional split | Stream filters, security handler (when we outgrow defaults) |
+| **UI** | ✅ `examples/vanilla`, stubs | `packages/react` etc. | Demos only; apps bring their own UI |
 
----
+**Rendering (important):** PdfCraft’s README states pages are **drawn by hayro** while a native painter is built. FastPDF adopts the same strategy: **hayro 0.7 + `embed-fonts`** for all page bitmaps. **lopdf** is not used for pixels.
 
-## Rust crate strategy (pure Rust)
-
-| Concern | Primary direction | Notes |
-|---------|-------------------|--------|
-| **PDF structure** | [`lopdf`](https://crates.io/crates/lopdf) and/or [`pdf`](https://crates.io/crates/pdf) (pdf-rs) | Evaluate both in Phase 0 spike; pick one **canonical** object model in `fastpdf-core`. |
-| **Content streams** | Custom interpreter in `fastpdf-core` | PDF operators → display list (paths, text, images, transforms). |
-| **Text extraction** | Built from display list + ToUnicode/CMap | Needed for selection and search. |
-| **Rasterization** | [`tiny-skia`](https://crates.io/crates/tiny-skia) + image decode (`image` crate) | CPU raster, WASM-friendly; no GPU requirement. |
-| **Fonts** | [`ab_glyph`](https://crates.io/crates/ab_glyph) / outline parsing | Type1, TrueType, composite fonts—incremental support. |
-| **WASM boundary** | [`wasm-bindgen`](https://crates.io/crates/wasm-bindgen) + `serde` for structured data | Keep heavy work in Rust; pass blobs/handles to JS. |
-| **Encryption** | `lopdf` / `pdf` support + tests | Standard security handlers in Phase 5. |
-
-**Non-goals for core:** binding PDFium, MuPDF, or other non-Rust renderers (optional separate feature crate later if community demands it—out of scope for “pure Rust” promise).
+See [docs/architecture.md](./docs/architecture.md).
 
 ---
 
-## Phase 0 — Foundation (1–2 weeks)
+## Milestone map
 
-**Objective:** Monorepo that builds, tests, and loads WASM in a browser.
-
-### Tasks
-
-- ✅ Cargo workspace: `fastpdf-core`, `fastpdf-wasm`, `fastpdf-cli`
-- ✅ `wasm-pack` pipeline: `packages/core/pkg` + TypeScript wrapper
-- ✅ TypeScript: `init()`, `engineVersion()`, `FastPdfDocument`
-- ✅ Examples: `examples/vanilla` (Vite), react/vue package stubs
-- ✅ CI: `.github/workflows/ci.yml`
-- ✅ Spike: **lopdf** — `docs/architecture.md`
-
-### Exit criteria
-
-- `npm run dev` in vanilla example prints WASM version in console
-- `cargo test` passes on Windows/Linux/macOS
+| Milestone | Theme | Outcome |
+|-----------|--------|---------|
+| **M0** | Scaffold | Workspace, WASM, Vite example |
+| **M1** | Model | lopdf: pages, outlines, metadata, errors |
+| **M2** | View | hayro: multi-page viewer, zoom, cache |
+| **M3** | Reader | Text layer, search, links, labels |
+| **M4** | Annotations | Read all common types; write highlight/ink |
+| **M5** | Forms & crypto | AcroForm fill, hayro+lopdf passwords |
+| **M6** | Performance | Tiles, workers, range load, memory caps |
+| **M7** | 1.0 & ecosystem | semver API, framework packages, docs site |
 
 ---
 
-## Phase 1 — Document model & bookmarks (2–3 weeks)
+## M0 — Foundation ✅
 
-**Objective:** Reliable open/read API without full render.
-
-### Tasks
-
-- ⬜ `FastPdfDocument::from_bytes` / incremental buffer API design
-- ⬜ Page tree: count, `MediaBox`/`CropBox`, rotation
-- ⬜ Document `Info` dictionary + XMP (basic)
-- ⬜ **Outlines (bookmarks):** tree structure, titles, destinations (named + explicit)
-- ⬜ Named destinations resolver
-- ⬜ Error types mapped to JS (`InvalidPassword`, `CorruptPdf`, `UnsupportedFeature`)
-- ⬜ Rust unit tests + golden JSON for outline trees
-
-### JS API (draft)
-
-```ts
-interface OutlineItem {
-  title: string;
-  pageIndex?: number;
-  children: OutlineItem[];
-}
-document.getPageCount(): number;
-document.getOutline(): OutlineItem[];
-```
-
-### Exit criteria
-
-- Demo: sidebar bookmark list navigates to `pageIndex` (placeholder canvas OK)
+- ✅ `fastpdf-core`, `fastpdf-wasm`, `fastpdf-cli`
+- ✅ `@fastpdf/core`, `wasm-pack`, Vite + `vite-plugin-wasm`
+- ✅ CI (Rust + wasm build)
+- ✅ ADR: lopdf for edit, hayro for render
 
 ---
 
-## Phase 2 — Rendering MVP (4–6 weeks)
+## M1 — Document model ✅ (lopdf)
 
-**Objective:** Correct-enough rendering for common office PDFs at reasonable speed.
+- ✅ `from_bytes`, `from_bytes_with_password` (lopdf decrypt)
+- ✅ Page count, MediaBox, rotation, page labels
+- ✅ Outlines (bookmark tree + destinations)
+- ✅ Info dictionary (UTF-16 aware)
+- ✅ Permissions / encrypted flag
+- ✅ WASM error mapping
+- ⬜ Named destinations (full tree)
+- ⬜ XMP metadata block
 
-### Tasks
-
-- ⬜ Content stream parser (common operators: `q/Q`, `cm`, `m/l/c/re`, `S/f/B`, `Do`, `Tj/TJ`, `Tf`, `rg/RG`, `gs`)
-- ⬜ Display list intermediate representation
-- ⬜ Rasterize to RGBA8 (`page.render({ scale })`)
-- ⬜ Embedded images: DCT, Flate; stub exotic filters with clear errors
-- ⬜ WASM: return `Uint8Array` or write to JS-owned buffer to reduce copies
-- ⬜ Vanilla example: multi-page viewer, zoom, page prev/next
-
-### Exit criteria
-
-- Test corpus (10–20 PDFs): renders without panic; visual regression snapshots (Wasm or headless compare)
-- Bookmarks from Phase 1 jump to rendered page
+**Exit:** Open corpus PDFs; outline sidebar navigates by `pageIndex`.
 
 ---
 
-## Phase 3 — Reader essentials (3–4 weeks)
+## M2 — Viewing ✅ → 🚧
 
-**Objective:** Behaviors users expect from a “PDF reader.”
+- ✅ hayro page render (RGBA for canvas)
+- ✅ Vanilla example: file picker, prev/next, outlines
+- 🚧 **Hayro session:** reuse `Pdf` + `RenderCache` per document
+- 🚧 Encrypted files: hayro `new_with_password` with stored password
+- 🚧 Tile crop (viewport regions) for large pages
+- 🚧 Thumbnails API (`maxSide` scale)
+- ⬜ Zoom control + fit-width in vanilla demo
+- ⬜ CLI `fastpdf render` uses hayro (not legacy path)
 
-### Tasks
-
-- ⬜ Text positions → HTML text layer or JSON quads for selection
-- ⬜ Search: case-insensitive, per-page index, highlight matches
-- ⬜ Link annotations: hover cursor, internal + external URL
-- ⬜ Page labels (`/PageLabels`)
-- ⬜ Thumbnails API (small `scale` render cache)
-- ⬜ Optional: `OffscreenCanvas` + worker wrapper design in TS (render in worker thread)
-
-### Exit criteria
-
-- Select/copy text on text-based PDFs
-- Click in-doc links and outline entries
+**Exit:** Office / Word / ONLYOFFICE PDFs match desktop viewer for text and images.
 
 ---
 
-## Phase 4 — Annotations (4–6 weeks)
+## M3 — Reader UX
 
-**Objective:** Full **read** path for standard annotation subtypes; **write** for common types.
+Inspired by PdfCraft `pdfcraft-render` text device (hayro `Device`, reading order).
 
-### Read (first)
+- ⬜ Hayro-based text extraction (glyph quads, not lopdf content scrape)
+- ⬜ HTML text layer in vanilla (select/copy)
+- ⬜ Search with match highlights
+- ⬜ Link hit-test + cursor (internal + URI)
+- ⬜ Optional: `OffscreenCanvas` worker wrapper in `@fastpdf/core`
 
-- ⬜ Enumerate annots per page: rect, contents, subtype, flags
-- ⬜ Text, Link, Highlight, Underline, Squiggly, StrikeOut, Ink, Stamp, FreeText
-- ⬜ Popup / IRT relationships
-- ⬜ Hit-testing in page coordinates for UI tooltips
-
-### Write (second)
-
-- ⬜ Create highlight/underline from text quads
-- ⬜ Ink strokes from pointer events
-- ⬜ Save incremental update (`from_bytes` → modified bytes) via `lopdf`/core writer
-- ⬜ Conflict policy: preserve foreign incremental updates
-
-### Exit criteria
-
-- Round-trip test: annotate → save → reopen → annots visible in FastPDF and a reference reader where possible
+**Exit:** Select/copy text on hayro-extracted spans; click links.
 
 ---
 
-## Phase 5 — Forms & security (3–4 weeks)
+## M4 — Annotations
 
-**Objective:** AcroForm and encrypted documents.
-
-### Tasks
-
-- ⬜ Field tree: text, checkbox, radio, choice, button
-- ⬜ Values, appearances (render widget annots)
-- ⬜ Submit/export FDF/XFDF (subset)
-- ⬜ Standard security handler: user password, owner password, permission bits
-- ⬜ Redaction helper API (roadmap-friendly)
-
-### Exit criteria
-
-- Open password-protected test vectors
-- Fill form fields and export updated PDF bytes
+- ✅ Read list + link subset via lopdf
+- ✅ Hit-test rects
+- 🚧 Highlight create + `save_to_bytes`
+- ⬜ Ink, FreeText, Stamp appearances (lopdf + appearances)
+- ⬜ Popup / IRT / reply threads
+- ⬜ Round-trip tests vs reference reader
 
 ---
 
-## Phase 6 — Performance & scale (ongoing)
+## M5 — Forms & security
 
-**Objective:** Large files and smooth scrolling.
-
-### Tasks
-
-- ⬜ Tiled rendering (viewport + overscan)
-- ⬜ LRU cache for pages and tiles (Rust-side + optional JS policy)
-- ⬜ `SharedArrayBuffer` path where COOP/COEP allow
-- ⬜ Linearized PDF / range request loader (fetch byte ranges)
-- ⬜ Memory budget API (`setMaxCacheMb`)
-- ⬜ Benchmarks: time-to-first-page, FPS while scrolling
-
-### Exit criteria
-
-- 500+ page synthetic doc: first page & scroll without OOM on typical laptop
+- ✅ Basic AcroForm enumeration + set field value
+- ⬜ Widget appearances in hayro render (form XObject)
+- ⬜ XFDF export/import (subset)
+- ⬜ Owner vs user password; permission bits enforced in API
+- ⬜ Linearized / encrypted save policy
 
 ---
 
-## Phase 7 — Ecosystem & 1.0 (2–3 weeks)
+## M6 — Performance & scale
 
-**Objective:** Stable public API and framework ergonomics.
+PdfCraft: tile cache, render stats, corpus gates.
 
-### Tasks
-
-- ⬜ `@fastpdf/react`: `PdfViewer`, `useDocument`, `usePageBitmap`
-- ⬜ `@fastpdf/vue` composable; Svelte/Angular examples in docs
-- ⬜ API semver policy, changelog, migration guide
-- ⬜ Documentation site: features matrix vs PDF 1.7 baseline
-- ⬜ npm publish WASM + AGPL/MIT licensing decision finalized
-
-### Exit criteria
-
-- semver `1.0.0` with compatibility guarantees on TS types and WASM ABI version
+- 🚧 LRU page bitmap cache (Rust)
+- ⬜ Hayro tile API (crop or upstream offsets when vendored)
+- ⬜ `SharedArrayBuffer` render worker (TS)
+- ⬜ HTTP range / linearized load
+- ⬜ `setMaxCacheEntries` / memory budget docs
+- ⬜ Bench: time-to-first-page, 500-page scroll
 
 ---
 
-## Testing strategy
+## M7 — Ecosystem & 1.0
+
+- 🚧 `@fastpdf/react` `PdfViewer`
+- 🚧 `@fastpdf/vue` `usePdfDocument`
+- ⬜ Svelte / Angular full examples
+- ⬜ Feature matrix vs PDF 1.7
+- ⬜ npm publish, changelog, semver policy for WASM ABI
+
+---
+
+## Testing strategy (PdfCraft-style)
 
 | Layer | Approach |
 |-------|----------|
-| **Rust** | Unit tests per module; `insta` snapshots for display lists |
-| **PDF fixtures** | Curated corpus in `tests/pdfs/` (small, redistributable); large files CI optional |
-| **WASM** | `wasm-bindgen-test` for panic-free render on fixtures |
-| **JS** | Vitest for loader and mock WASM |
-| **Visual** | PNG diffs per page render (threshold for antialiasing) |
+| **Unit** | lopdf outline/metadata; hayro render smoke on tiny PDF |
+| **Corpus** | Redistributable fixtures in `tests/pdfs/` (+ optional pdf.js subset later) |
+| **WASM** | `wasm-pack test` / headless render in CI |
+| **Visual** | CLI PNG output diff (threshold) |
+| **Oracle** | Later: compare text with poppler/hayro on CI optional job |
 
 ---
 
-## Risk register
+## Risks
 
 | Risk | Mitigation |
 |------|------------|
-| Pure Rust render slower than PDFium | Tile cache, worker, scale caps; document perf expectations |
-| Font/CMap complexity | Tiered font support; fallbacks with visible tofu + logging |
-| WASM binary size | `wasm-opt`, feature flags (`default-features = false`), split `parse` vs `render` features |
-| Spec breadth | Publish **support matrix**; return `UnsupportedFeature` not silent wrong output |
+| WASM binary size (hayro) | `wasm-opt`, lazy init, document cache limits |
+| Dual parser (lopdf + hayro) | Clear split: edit vs render; invalidate hayro session on save |
+| Password / encrypt edge cases | hayro open + lopdf decrypt; test vectors |
+| Text selection before M3 | Document “search is approximate until hayro text lands” |
 
 ---
 
-## Suggested order of work (first 30 days)
+## Version tags
 
-```text
-Week 1: Phase 0 complete + architecture spike (lopdf vs pdf)
-Week 2: Phase 1 outlines + page metadata in JS API
-Week 3–4: Phase 2 operator subset + first real page render
-Week 5: Phase 3 text extraction MVP on simple PDFs
-```
-
----
-
-## Version tagging
-
-- `0.1.0` — WASM loads, open PDF, outlines, metadata  
-- `0.2.0` — Page render MVP  
-- `0.3.0` — Text layer + search + links  
-- `0.4.0` — Annotations read  
-- `0.5.0` — Annotations write + save  
-- `0.6.0` — Forms + encryption  
-- `1.0.0` — API frozen, framework packages documented  
+- **0.1.0** — Scaffold + lopdf model + toy renderer (superseded)
+- **0.2.0** — hayro viewing ✅
+- **0.2.x** — 🚧 M2 session, tiles, thumbnails, viewer polish
+- **0.3.0** — M3 reader (hayro text layer)
+- **0.4.0** — M4 annotations write
+- **0.5.0** — M5 forms/crypto
+- **1.0.0** — M7 API freeze
 
 ---
 
-## How to use this roadmap
+## Next implementation slice (active)
 
-1. Complete **Phase 0** checklist in order.  
-2. Keep `fastpdf-core` free of `wasm-bindgen` so all logic is testable with `cargo test`.  
-3. Only expand JS API when Rust API is stable for that feature.  
-4. Update this file at each phase exit: mark ✅ and link to PRs or tags.
+1. Hayro `Pdf` + `RenderCache` session on `FastPdfDocument` (invalidate on save).
+2. Password-aware hayro open.
+3. Tile crop + `thumbnail(max_side)`.
+4. Vanilla: zoom slider, thumbnail strip.
+5. Begin `render::text` hayro device (M3 spike).
 
-For embedding examples, see [README.md](./README.md).
+Update this file when a milestone exits.

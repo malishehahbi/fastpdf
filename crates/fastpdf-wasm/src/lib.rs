@@ -111,6 +111,14 @@ impl WasmDocument {
             .map_err(to_js_err)
     }
 
+    #[wasm_bindgen(js_name = renderThumbnail)]
+    pub fn render_thumbnail(&mut self, index: u32, max_side: f32) -> Result<WasmRenderResult, JsError> {
+        self.inner
+            .render_thumbnail(index, max_side)
+            .map(WasmRenderResult::from)
+            .map_err(to_js_err)
+    }
+
     #[wasm_bindgen(js_name = renderTile)]
     pub fn render_tile(
         &mut self,

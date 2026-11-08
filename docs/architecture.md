@@ -16,6 +16,8 @@ Page bitmaps are produced by **[hayro](https://docs.rs/hayro) 0.7** with the `em
 
 `lopdf` remains the model for outlines, annotations, forms, and saving. Hayro reads the original PDF bytes kept on the document.
 
+`FastPdfDocument` keeps a lazily opened **`HayroSession`** (parsed `Pdf`) for the lifetime of the document. After `save_to_bytes` or structural edits, the session is dropped so the next render uses updated bytes. Password-protected files pass the user password into hayro while lopdf handles metadata decrypt.
+
 ## WASM boundary
 
 `fastpdf-wasm` exposes `WasmDocument`; `packages/core` wraps it with `FastPdfDocument` and typed helpers.

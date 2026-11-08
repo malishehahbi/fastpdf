@@ -82,6 +82,12 @@ export class FastPdfDocument {
     return renderResultToImageData(result);
   }
 
+  /** Rasterize a page scaled so its longest side is at most `maxSide` points (hayro). */
+  renderThumbnail(index: number, maxSide = 96): ImageData {
+    const result = this.doc.renderThumbnail(index, maxSide);
+    return renderResultToImageData(result);
+  }
+
   search(query: string): unknown[] {
     return this.doc.search(query) as unknown[];
   }

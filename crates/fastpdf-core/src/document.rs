@@ -18,6 +18,9 @@ pub struct FastPdfDocument {
     pub(crate) doc: Document,
     /// Original file bytes. Page pixels are produced by hayro from this buffer.
     source: Vec<u8>,
+    /// User password for hayro when the file is still encrypted on disk.
+    password: Option<String>,
+    hayro: Option<render::HayroSession>,
     pub(crate) pages: BTreeMap<u32, ObjectId>,
     labels: BTreeMap<u32, String>,
     cache: TileCache,
@@ -34,7 +37,24 @@ impl FastPdfDocument {
         let mut doc = Document::load_mem(bytes)?;
         doc.decrypt(password.as_bytes())
             .map_err(|_| FastPdfError::InvalidPassword)?;
-        Self::from_document(doc, bytes.to_vec())
+        let mut s = Self::from_document(doc, bytes.to_vec())?;
+        s.password = Some(password.to_string());
+        Ok(s)
+    }
+
+    fn ensure_hayro(&mut self) -> Result<()> {
+        if self.hayro.is_none() {
+            self.hayro = Some(render::HayroSession::open(
+                &self.source,
+                self.password.as_deref(),
+            )?);
+        }
+        Ok(())
+    }
+
+    fn invalidate_render(&mut self) {
+        self.hayro = None;
+        self.cache.clear();
     }
 
     fn normalize_pages(pages: BTreeMap<u32, ObjectId>) -> BTreeMap<u32, ObjectId> {
@@ -53,6 +73,8 @@ impl FastPdfDocument {
         Ok(Self {
             doc,
             source,
+            password: None,
+            hayro: None,
             pages,
             labels,
             cache: TileCache::new(32),
@@ -95,7 +117,27 @@ impl FastPdfDocument {
         if let Some(hit) = self.cache.get(&key) {
             return Ok(hit.clone());
         }
-        let out = render::render_bytes(&self.source, index as usize, scale)?;
+        self.ensure_hayro()?;
+        let out = self
+            .hayro
+            .as_ref()
+            .unwrap()
+            .render_page(index as usize, scale)?;
+        self.cache.insert(key, out.clone());
+        Ok(out)
+    }
+
+    pub fn render_thumbnail(&mut self, index: u32, max_side: f32) -> Result<RenderOutput> {
+        let key = format!("thumb-{index}-{max_side}");
+        if let Some(hit) = self.cache.get(&key) {
+            return Ok(hit.clone());
+        }
+        self.ensure_hayro()?;
+        let out = self
+            .hayro
+            .as_ref()
+            .unwrap()
+            .render_thumbnail(index as usize, max_side)?;
         self.cache.insert(key, out.clone());
         Ok(out)
     }
@@ -113,9 +155,15 @@ impl FastPdfDocument {
         if let Some(hit) = self.cache.get(&key) {
             return Ok(hit.clone());
         }
-        // Full page via hayro; tile crop is a follow-up. Callers still get a valid bitmap.
-        let _ = (tile_x, tile_y, tile_w, tile_h);
-        let out = render::render_bytes(&self.source, index as usize, scale)?;
+        self.ensure_hayro()?;
+        let out = self.hayro.as_ref().unwrap().render_tile(
+            index as usize,
+            scale,
+            tile_x,
+            tile_y,
+            tile_w,
+            tile_h,
+        )?;
         self.cache.insert(key, out.clone());
         Ok(out)
     }
@@ -187,6 +235,7 @@ impl FastPdfDocument {
     ) -> Result<u32> {
         annotation::add_highlight(&mut self.doc, &self.pages, page_index, quad, contents)?;
         self.pages_text = None;
+        self.invalidate_render();
         Ok(0)
     }
 
@@ -195,6 +244,8 @@ impl FastPdfDocument {
         self.doc
             .save_to(&mut buf)
             .map_err(|e| FastPdfError::Lopdf(e.to_string()))?;
+        self.source = buf.clone();
+        self.invalidate_render();
         Ok(buf)
     }
 
@@ -210,6 +261,7 @@ impl FastPdfDocument {
         self.pages = Self::normalize_pages(self.doc.get_pages());
         self.labels = page::resolve_page_labels(&self.doc, &self.pages);
         self.pages_text = None;
+        self.invalidate_render();
         Ok(())
     }
 }

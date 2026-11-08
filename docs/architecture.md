@@ -10,17 +10,11 @@
 
 **Spike result (synthetic fixtures):** both parsers open simple files; **lopdf** is the canonical model for outlines, annotation CRUD, AcroForm traversal, and incremental save.
 
-## Rendering (browser / WASM)
+## Rendering
 
-Pipeline: **content streams → display list → tiny-skia** (see `render/interpreter.rs`).
+Page bitmaps are produced by **[hayro](https://docs.rs/hayro) 0.7** with the `embed-fonts` feature. That is the same pure-Rust rasterizer [PdfCraft](https://github.com/storytold/pdfcraft) uses for viewing (their README: “pages are drawn by the hayro crate”). It handles real fonts, images (JPEG, JPEG 2000, JBIG2, CCITT), and most content streams.
 
-- **Text:** lopdf `ToUnicode` / encodings for strings; **ab_glyph** outlines with PDF-embedded TTF (`FontFile2`) or a build-time default font (`build.rs`).
-- **Images:** `/DeviceRGB`, `/DeviceGray`, `/DeviceCMYK`, `/Indexed`, JPEG/PNG via `image` crate; drawn in the PDF **1×1 unit square** × CTM (required for correct placement).
-- **Forms:** nested XObject streams.
-
-### Standard desktop alternative (not in WASM yet)
-
-Industry-default rasterizers are **PDFium** or **MuPDF** (used by Chrome, many viewers). Pure Rust cannot match them on every PDF 1.7 file without years of operator work. For native-only high fidelity later, add optional `pdfium-render` behind a feature flag; **WASM builds keep the pure-Rust pipeline**.
+`lopdf` remains the model for outlines, annotations, forms, and saving. Hayro reads the original PDF bytes kept on the document.
 
 ## WASM boundary
 

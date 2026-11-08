@@ -40,8 +40,7 @@ async function renderCurrent() {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D context unavailable');
     ctx.putImageData(image, 0, 0);
-    const spans = doc.getTextSpans(page);
-    status.textContent = `Rendered ${image.width}×${image.height} px · page ${info.width.toFixed(0)}×${info.height.toFixed(0)} pt · ${spans.length} text span(s) — complex Office PDFs may still look incomplete until font support improves.`;
+    status.textContent = `Rendered ${image.width}×${image.height} px · page ${info.width.toFixed(0)}×${info.height.toFixed(0)} pt (hayro)`;
     updatePager();
   } catch (err) {
     console.error(err);

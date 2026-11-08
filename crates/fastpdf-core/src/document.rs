@@ -16,6 +16,8 @@ use std::collections::BTreeMap;
 
 pub struct FastPdfDocument {
     pub(crate) doc: Document,
+    /// Original file bytes. Page pixels are produced by hayro from this buffer.
+    source: Vec<u8>,
     pub(crate) pages: BTreeMap<u32, ObjectId>,
     labels: BTreeMap<u32, String>,
     cache: TileCache,
@@ -25,14 +27,14 @@ pub struct FastPdfDocument {
 impl FastPdfDocument {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let doc = Document::load_mem(bytes)?;
-        Self::from_document(doc)
+        Self::from_document(doc, bytes.to_vec())
     }
 
     pub fn from_bytes_with_password(bytes: &[u8], password: &str) -> Result<Self> {
         let mut doc = Document::load_mem(bytes)?;
         doc.decrypt(password.as_bytes())
             .map_err(|_| FastPdfError::InvalidPassword)?;
-        Self::from_document(doc)
+        Self::from_document(doc, bytes.to_vec())
     }
 
     fn normalize_pages(pages: BTreeMap<u32, ObjectId>) -> BTreeMap<u32, ObjectId> {
@@ -42,7 +44,7 @@ impl FastPdfDocument {
             .collect()
     }
 
-    fn from_document(doc: Document) -> Result<Self> {
+    fn from_document(doc: Document, source: Vec<u8>) -> Result<Self> {
         let pages = Self::normalize_pages(doc.get_pages());
         if pages.is_empty() {
             return Err(FastPdfError::CorruptPdf("no pages".into()));
@@ -50,6 +52,7 @@ impl FastPdfDocument {
         let labels = page::resolve_page_labels(&doc, &pages);
         Ok(Self {
             doc,
+            source,
             pages,
             labels,
             cache: TileCache::new(32),
@@ -92,15 +95,7 @@ impl FastPdfDocument {
         if let Some(hit) = self.cache.get(&key) {
             return Ok(hit.clone());
         }
-        let id = page::page_id(&self.pages, index)?;
-        let info = page::page_info(&self.doc, &self.pages, index)?;
-        let out = render::render_page(
-            &self.doc,
-            id,
-            info.width,
-            info.height,
-            scale,
-        )?;
+        let out = render::render_bytes(&self.source, index as usize, scale)?;
         self.cache.insert(key, out.clone());
         Ok(out)
     }
@@ -118,19 +113,9 @@ impl FastPdfDocument {
         if let Some(hit) = self.cache.get(&key) {
             return Ok(hit.clone());
         }
-        let id = page::page_id(&self.pages, index)?;
-        let info = page::page_info(&self.doc, &self.pages, index)?;
-        let out = render::render_tile(
-            &self.doc,
-            id,
-            info.width,
-            info.height,
-            scale,
-            tile_x,
-            tile_y,
-            tile_w,
-            tile_h,
-        )?;
+        // Full page via hayro; tile crop is a follow-up. Callers still get a valid bitmap.
+        let _ = (tile_x, tile_y, tile_w, tile_h);
+        let out = render::render_bytes(&self.source, index as usize, scale)?;
         self.cache.insert(key, out.clone());
         Ok(out)
     }
@@ -220,6 +205,7 @@ impl FastPdfDocument {
         let mut merged = self.save_to_bytes()?; // mut self
         merged.extend_from_slice(chunk);
         let doc = Document::load_mem(&merged)?;
+        self.source = merged;
         self.doc = doc;
         self.pages = Self::normalize_pages(self.doc.get_pages());
         self.labels = page::resolve_page_labels(&self.doc, &self.pages);

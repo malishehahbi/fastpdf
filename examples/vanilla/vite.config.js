@@ -6,8 +6,16 @@ import wasm from 'vite-plugin-wasm';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(root, '../..');
 
+const corePackage = path.join(repoRoot, 'packages/core');
+
 export default defineConfig({
   plugins: [wasm()],
+  resolve: {
+    // Always use the workspace build (file: deps in node_modules go stale after wasm-pack).
+    alias: {
+      '@fastpdf/core': path.join(corePackage, 'dist/index.js'),
+    },
+  },
   optimizeDeps: {
     exclude: ['@fastpdf/core'],
   },

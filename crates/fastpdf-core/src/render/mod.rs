@@ -1,7 +1,9 @@
 //! Page rasterization via [hayro](https://docs.rs/hayro) (PdfCraft-style).
 
+mod text_extract;
+
 use crate::error::{FastPdfError, Result};
-use crate::types::RenderOutput;
+use crate::types::{RenderOutput, TextSpan};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::vello_cpu::color::palette::css::WHITE;
@@ -75,6 +77,22 @@ impl HayroSession {
             tile_h,
             scale,
         )
+    }
+
+    pub fn text_spans(&self, page_index: usize) -> Result<Vec<TextSpan>> {
+        let pages = self.pdf.pages();
+        let page = pages
+            .get(page_index)
+            .ok_or(FastPdfError::PageOutOfRange(page_index as u32))?;
+        Ok(text_extract::extract_page_spans(&page, &self.interp))
+    }
+
+    pub fn view_dimensions(&self, page_index: usize) -> Result<(f32, f32)> {
+        let pages = self.pdf.pages();
+        let page = pages
+            .get(page_index)
+            .ok_or(FastPdfError::PageOutOfRange(page_index as u32))?;
+        Ok(page.render_dimensions())
     }
 }
 

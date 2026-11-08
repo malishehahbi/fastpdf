@@ -30,6 +30,32 @@ export type PageInfo = {
 
 export type RenderOptions = { scale?: number };
 
+export type TextSpan = {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  yTop?: number;
+  fontSize?: number;
+};
+
+export type PageViewSize = { width: number; height: number };
+
+export type SearchMatch = {
+  pageIndex: number;
+  start: number;
+  end: number;
+  snippet: string;
+  rects?: { x: number; y: number; width: number; height: number }[];
+};
+
+export type LinkDto = {
+  rect: { x: number; y: number; width: number; height: number };
+  uri?: string;
+  pageIndex?: number;
+};
+
 export class FastPdfDocument {
   private doc: WasmDocument;
 
@@ -76,6 +102,16 @@ export class FastPdfDocument {
     return this.doc.getPageInfo(index) as PageInfo;
   }
 
+  /** Hayro page size in points (aligned with the rendered bitmap). */
+  getPageViewSize(index: number): PageViewSize {
+    const wasmDoc = this.doc as WasmDocument & { getPageViewSize?: (i: number) => PageViewSize };
+    if (typeof wasmDoc.getPageViewSize === 'function') {
+      return wasmDoc.getPageViewSize(index) as PageViewSize;
+    }
+    const info = this.getPageInfo(index);
+    return { width: info.width, height: info.height };
+  }
+
   async renderPage(index: number, options: RenderOptions = {}): Promise<ImageData> {
     const scale = options.scale ?? 1.5;
     const result = this.doc.renderPage(index, scale);
@@ -88,20 +124,20 @@ export class FastPdfDocument {
     return renderResultToImageData(result);
   }
 
-  search(query: string): unknown[] {
-    return this.doc.search(query) as unknown[];
-  }
-
   getAnnotations(index: number): unknown[] {
     return this.doc.getAnnotations(index) as unknown[];
   }
 
-  getLinks(index: number): unknown[] {
-    return this.doc.getLinks(index) as unknown[];
+  getLinks(index: number): LinkDto[] {
+    return this.doc.getLinks(index) as LinkDto[];
   }
 
-  getTextSpans(index: number): unknown[] {
-    return this.doc.getTextSpans(index) as unknown[];
+  getTextSpans(index: number): TextSpan[] {
+    return this.doc.getTextSpans(index) as TextSpan[];
+  }
+
+  search(query: string): SearchMatch[] {
+    return this.doc.search(query) as SearchMatch[];
   }
 
   getFormFields(): unknown[] {

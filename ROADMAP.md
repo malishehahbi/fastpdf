@@ -4,7 +4,7 @@ FastPDF is a **pure Rust** PDF engine for **WASM** and **embeddable JS** (React,
 
 **Legend:** ✅ done · 🚧 in progress · ⬜ not started
 
-**Current stage:** alpha **0.2.x** — faithful viewing via hayro; edit/save via lopdf.
+**Current stage:** alpha **0.3.0-alpha** — hayro viewing + hayro text layer (M3 started); edit/save via lopdf.
 
 ---
 
@@ -66,15 +66,16 @@ See [docs/architecture.md](./docs/architecture.md).
 
 ---
 
-## M2 — Viewing ✅ → 🚧
+## M2 — Viewing ✅
 
 - ✅ hayro page render (RGBA for canvas)
 - ✅ Vanilla example: file picker, prev/next, outlines
-- 🚧 **Hayro session:** reuse `Pdf` + `RenderCache` per document
-- 🚧 Encrypted files: hayro `new_with_password` with stored password
-- 🚧 Tile crop (viewport regions) for large pages
-- 🚧 Thumbnails API (`maxSide` scale)
-- ⬜ Zoom control + fit-width in vanilla demo
+- ✅ **Hayro session:** reuse `Pdf` per document (invalidated on save)
+- ✅ Encrypted files: hayro `new_with_password` with stored password
+- ✅ Tile crop (viewport regions) for large pages
+- ✅ Thumbnails API (`maxSide` scale)
+- ✅ Zoom + thumbnail strip in vanilla demo
+- ✅ MediaBox inheritance + PDF text-string decoding (bookmarks)
 - ⬜ CLI `fastpdf render` uses hayro (not legacy path)
 
 **Exit:** Office / Word / ONLYOFFICE PDFs match desktop viewer for text and images.
@@ -85,10 +86,11 @@ See [docs/architecture.md](./docs/architecture.md).
 
 Inspired by PdfCraft `pdfcraft-render` text device (hayro `Device`, reading order).
 
-- ⬜ Hayro-based text extraction (glyph quads, not lopdf content scrape)
-- ⬜ HTML text layer in vanilla (select/copy)
-- ⬜ Search with match highlights
-- ⬜ Link hit-test + cursor (internal + URI)
+- ✅ Hayro text extraction (`render::text_extract`, glyph boxes → `TextSpan`)
+- ✅ HTML text layer in vanilla (select/copy)
+- ✅ Search with hayro highlight rects (lopdf fallback for plain search text)
+- ✅ Link hit-test + cursor (internal + URI) in vanilla
+- 🚧 Reading order, line grouping, full PdfCraft `PageText` parity
 - ⬜ Optional: `OffscreenCanvas` worker wrapper in `@fastpdf/core`
 
 **Exit:** Select/copy text on hayro-extracted spans; click links.
@@ -176,10 +178,10 @@ PdfCraft: tile cache, render stats, corpus gates.
 
 ## Next implementation slice (active)
 
-1. Hayro `Pdf` + `RenderCache` session on `FastPdfDocument` (invalidate on save).
-2. Password-aware hayro open.
-3. Tile crop + `thumbnail(max_side)`.
-4. Vanilla: zoom slider, thumbnail strip.
-5. Begin `render::text` hayro device (M3 spike).
+1. Port PdfCraft line layout + case-folded search on glyph indices.
+2. CLI `fastpdf render` / `fastpdf text` via hayro.
+3. M4: highlight write + round-trip tests.
+4. M5: form appearances visible in hayro render.
+5. M6: render worker + tile cache tuning.
 
 Update this file when a milestone exits.

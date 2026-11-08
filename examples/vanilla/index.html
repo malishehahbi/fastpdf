@@ -25,12 +25,41 @@
       #thumbs button.active { border-color: #1565c0; }
       #thumbs canvas { display: block; width: 100%; height: auto; }
       #sidebar { width: 200px; flex-shrink: 0; max-height: 80vh; overflow-y: auto; }
-      #viewer { flex: 1; min-width: 0; overflow: auto; }
+      #viewer { flex: 1; min-width: 0; overflow: auto; position: relative; }
+      #pageSurface { position: relative; display: inline-block; }
       #canvas {
         border: 1px solid #888;
         background: #f0f0f0;
         display: block;
       }
+      #textLayer, #highlightLayer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+      }
+      #textLayer span {
+        position: absolute;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        user-select: text;
+        pointer-events: auto;
+        white-space: pre;
+        overflow: hidden;
+        font-family: sans-serif;
+      }
+      #textLayer span::selection {
+        background: rgba(0, 100, 255, 0.35);
+      }
+      #highlightLayer .highlight {
+        position: absolute;
+        background: rgba(255, 235, 59, 0.45);
+        pointer-events: none;
+      }
+      .search-bar { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+      .search-bar input { min-width: 10rem; }
+      #searchResults { display: flex; flex-direction: column; gap: 2px; max-height: 8rem; overflow: auto; }
+      .search-hit { text-align: left; font-size: 0.85rem; }
       .outline button { display: block; width: 100%; text-align: left; margin: 2px 0; }
       #status { margin: 0.5rem 0; color: #333; font-size: 0.9rem; }
       #error { color: #b00020; margin: 0.5rem 0; }
@@ -60,13 +89,24 @@
         <input type="range" id="zoom" min="0.5" max="3" step="0.05" value="1.25" />
         <span id="zoomLabel">1.25×</span>
       </label>
+      <div class="search-bar">
+        <input type="search" id="search" placeholder="Search…" autocomplete="off" />
+        <button type="button" id="searchBtn">Find</button>
+      </div>
     </div>
+    <div id="searchResults"></div>
     <p id="status">Choose a PDF to render.</p>
     <p id="error" hidden></p>
     <div id="layout">
       <div id="thumbs" aria-label="Page thumbnails"></div>
       <div id="sidebar" aria-label="Outline"></div>
-      <div id="viewer"><canvas id="canvas" width="1" height="1" aria-label="PDF page"></canvas></div>
+      <div id="viewer">
+        <div id="pageSurface">
+          <canvas id="canvas" width="1" height="1" aria-label="PDF page"></canvas>
+          <div id="highlightLayer" aria-hidden="true"></div>
+          <div id="textLayer" aria-hidden="true"></div>
+        </div>
+      </div>
     </div>
     <script type="module" src="/main.js"></script>
   </body>

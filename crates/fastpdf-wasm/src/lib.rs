@@ -103,6 +103,20 @@ impl WasmDocument {
         serde_wasm_bindgen::to_value(&info).map_err(|e| JsError::new(&e.to_string()))
     }
 
+    /// Width and height in points used by hayro for this page (matches the bitmap).
+    #[wasm_bindgen(js_name = getPageViewSize)]
+    pub fn get_page_view_size(&mut self, index: u32) -> Result<JsValue, JsError> {
+        let (w, h) = self.inner.page_view_size(index).map_err(to_js_err)?;
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Size {
+            width: f32,
+            height: f32,
+        }
+        serde_wasm_bindgen::to_value(&Size { width: w, height: h })
+            .map_err(|e| JsError::new(&e.to_string()))
+    }
+
     #[wasm_bindgen(js_name = renderPage)]
     pub fn render_page(&mut self, index: u32, scale: f32) -> Result<WasmRenderResult, JsError> {
         self.inner
@@ -146,7 +160,7 @@ impl WasmDocument {
     }
 
     #[wasm_bindgen(js_name = getTextSpans)]
-    pub fn get_text_spans(&self, index: u32) -> Result<JsValue, JsError> {
+    pub fn get_text_spans(&mut self, index: u32) -> Result<JsValue, JsError> {
         let spans = self.inner.text_spans(index).map_err(to_js_err)?;
         serde_wasm_bindgen::to_value(&spans).map_err(|e| JsError::new(&e.to_string()))
     }

@@ -107,6 +107,8 @@ fn push_span(spans: &mut Vec<TextSpan>, text: &str, ts: &TextState, ctm: [f32; 6
         y,
         width,
         height: ts.font_size,
+        y_top: 0.0,
+        font_size: ts.font_size,
     });
 }
 
@@ -118,7 +120,7 @@ fn operand_string(obj: &Object) -> Option<String> {
 }
 
 fn pdf_string_decode(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).into_owned()
+    crate::pdf_num::decode_pdf_text_string(bytes)
 }
 
 fn op_matrix(ops: &[Object]) -> [f32; 6] {

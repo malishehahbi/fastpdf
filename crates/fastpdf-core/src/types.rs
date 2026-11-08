@@ -65,19 +65,28 @@ pub struct LinkDto {
 #[serde(rename_all = "camelCase")]
 pub struct TextSpan {
     pub text: String,
+    /// PDF user space (origin bottom-left); links / legacy highlights.
     pub x: f32,
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    /// Hayro view space: distance from page top in points (matches raster).
+    #[serde(default)]
+    pub y_top: f32,
+    /// Typographic size in view points (em height).
+    #[serde(default)]
+    pub font_size: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchMatch {
-    pub page_index: u32,
+    pub page_index: u32, // serialized as pageIndex
     pub start: usize,
     pub end: usize,
     pub snippet: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rects: Vec<Rect>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

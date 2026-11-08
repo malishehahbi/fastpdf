@@ -54,8 +54,8 @@ export class FastPdfDocument {
     return new FastPdfDocument(doc);
   }
 
-  static async openUrl(url: string, init?: RequestInit): Promise<FastPdfDocument> {
-    const res = await fetch(url, init);
+  static async openUrl(url: string, fetchOptions?: RequestInit): Promise<FastPdfDocument> {
+    const res = await fetch(url, fetchOptions);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return FastPdfDocument.openBytes(await res.arrayBuffer());
   }

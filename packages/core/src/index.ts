@@ -1,13 +1,13 @@
-import wasmInit, { version, WasmDocument, WasmRenderResult } from '../pkg/fastpdf.js';
+import { version, WasmDocument, WasmRenderResult } from '../pkg/fastpdf.js';
 
 let initPromise: Promise<void> | null = null;
 
-/** Load the WASM module once per application. */
+/** Ensure the WASM module is loaded (bundler target auto-inits on first import). */
 export async function init(): Promise<void> {
   if (!initPromise) {
-    initPromise = wasmInit().then(() => undefined);
+    initPromise = import('../pkg/fastpdf.js').then(() => undefined);
   }
-  return initPromise;
+  await initPromise;
 }
 
 export function engineVersion(): string {
@@ -61,7 +61,7 @@ export class FastPdfDocument {
   }
 
   pageCount(): number {
-    return this.doc.pageCount;
+    return this.doc.pageCount();
   }
 
   getOutline(): OutlineItem[] {
@@ -78,12 +78,8 @@ export class FastPdfDocument {
 
   async renderPage(index: number, options: RenderOptions = {}): Promise<ImageData> {
     const scale = options.scale ?? 1.5;
-    const result = this.doc.renderPage(index, scale) as WasmRenderResult;
-    return new ImageData(
-      new Uint8ClampedArray(result.pixels),
-      result.width,
-      result.height,
-    );
+    const result = this.doc.renderPage(index, scale);
+    return renderResultToImageData(result);
   }
 
   search(query: string): unknown[] {
@@ -119,7 +115,7 @@ export class FastPdfDocument {
   }
 
   saveToBytes(): Uint8Array {
-    return new Uint8Array(this.doc.saveToBytes());
+    return this.doc.saveToBytes();
   }
 
   setMaxCacheEntries(n: number): void {
@@ -138,9 +134,17 @@ export class FastPdfDocument {
     tileW: number,
     tileH: number,
   ): ImageData {
-    const result = this.doc.renderTile(index, scale, tileX, tileY, tileW, tileH) as WasmRenderResult;
-    return new ImageData(new Uint8ClampedArray(result.pixels), result.width, result.height);
+    const result = this.doc.renderTile(index, scale, tileX, tileY, tileW, tileH);
+    return renderResultToImageData(result);
   }
+}
+
+function renderResultToImageData(result: WasmRenderResult): ImageData {
+  return new ImageData(
+    new Uint8ClampedArray(result.pixels()),
+    result.width,
+    result.height,
+  );
 }
 
 export { WasmDocument, WasmRenderResult };

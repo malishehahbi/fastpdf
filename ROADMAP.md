@@ -4,6 +4,8 @@ This document is the build plan for a **pure Rust** PDF engine targeting **WASM*
 
 **Legend:** ✅ done · 🚧 in progress · ⬜ not started
 
+**Status (v0.1.0):** Phases 0–7 have **baseline implementations** in the repo (Rust core, WASM, `@fastpdf/core`, CLI, examples). Rendering, fonts, and full PDF 1.7 coverage remain incremental hardening—not every exit criterion in the tables below is production-grade yet. See [docs/architecture.md](./docs/architecture.md).
+
 ---
 
 ## Executive summary
@@ -45,12 +47,12 @@ Pure Rust **rendering** is the longest pole; the roadmap front-loads parse/outli
 
 ### Tasks
 
-- ⬜ Cargo workspace: `fastpdf-core`, `fastpdf-wasm`, optional `fastpdf-cli`
-- ⬜ `wasm-pack` pipeline: `--target web` + `--target bundler` npm package under `packages/core`
-- ⬜ TypeScript: `init()`, version string, smoke test `hello()` from WASM
-- ⬜ Examples: `examples/vanilla` (Vite), stub folders for react/vue
-- ⬜ CI: `cargo test`, `clippy`, `wasm-pack build`, eslint on `packages/core`
-- ⬜ **Spike (2 days):** open 3 fixture PDFs with `lopdf` vs `pdf`; document decision in `docs/architecture.md`
+- ✅ Cargo workspace: `fastpdf-core`, `fastpdf-wasm`, `fastpdf-cli`
+- ✅ `wasm-pack` pipeline: `packages/core/pkg` + TypeScript wrapper
+- ✅ TypeScript: `init()`, `engineVersion()`, `FastPdfDocument`
+- ✅ Examples: `examples/vanilla` (Vite), react/vue package stubs
+- ✅ CI: `.github/workflows/ci.yml`
+- ✅ Spike: **lopdf** — `docs/architecture.md`
 
 ### Exit criteria
 

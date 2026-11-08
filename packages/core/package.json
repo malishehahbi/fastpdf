@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "build": "npm run build:wasm && tsc",
-    "build:wasm": "wasm-pack build ../../crates/fastpdf-wasm --target bundler --out-dir pkg --out-name fastpdf",
+    "build:wasm": "wasm-pack build ../../crates/fastpdf-wasm --target bundler --out-dir ../../packages/core/pkg --out-name fastpdf",
     "test": "node --test dist/test/smoke.test.js"
   },
   "devDependencies": {

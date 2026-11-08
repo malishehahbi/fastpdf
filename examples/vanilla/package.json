@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "predev": "npm run build:core -w @fastpdf/core --if-present || npm --prefix ../../packages/core run build"
+    "predev": "npm --prefix ../../packages/core run build"
   },
   "dependencies": {
     "@fastpdf/core": "file:../../packages/core"

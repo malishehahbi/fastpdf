@@ -246,11 +246,3 @@ cargo test --workspace
 cargo clippy --workspace -- -D warnings
 cd packages/core && npm test
 ```
-
-## License
-
-TBD (recommend **MIT OR Apache-2.0** for library + WASM redistribution).
-
-## Contributing
-
-Contributions welcome once Phase 0 lands. Until then, follow **ROADMAP.md** Phase 0 checklist to bootstrap the workspace.

@@ -1,0 +1,15 @@
+[package]
+name = "fastpdf-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI for FastPDF development"
+
+[[bin]]
+name = "fastpdf"
+path = "src/main.rs"
+
+[dependencies]
+fastpdf-core = { path = "../fastpdf-core" }
+clap = { version = "4", features = ["derive"] }
+image = { workspace = true, default-features = true, features = ["png"] }

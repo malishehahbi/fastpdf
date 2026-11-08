@@ -1,0 +1,26 @@
+{
+  "name": "@fastpdf/core",
+  "version": "0.1.0",
+  "description": "FastPDF WASM core — framework-agnostic PDF engine",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "pkg"
+  ],
+  "scripts": {
+    "build": "npm run build:wasm && tsc",
+    "build:wasm": "wasm-pack build ../../crates/fastpdf-wasm --target bundler --out-dir pkg --out-name fastpdf",
+    "test": "node --test dist/test/smoke.test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

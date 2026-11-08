@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo test --workspace
+      - run: cargo clippy --workspace -- -D warnings
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - run: rustup target add wasm32-unknown-unknown
+      - run: wasm-pack build crates/fastpdf-wasm --target bundler --out-dir packages/core/pkg --out-name fastpdf
+  node:
+    runs-on: ubuntu-latest
+    needs: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g wasm-pack
+      - run: rustup target add wasm32-unknown-unknown
+      - run: npm --prefix packages/core install
+      - run: npm --prefix packages/core run build

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FastPDF — Vanilla</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 1rem; }
+      #sidebar { width: 220px; float: left; }
+      #viewer { margin-left: 240px; }
+      canvas { border: 1px solid #ccc; max-width: 100%; }
+      .outline button { display: block; width: 100%; text-align: left; margin: 2px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>FastPDF</h1>
+    <p>Engine: <code id="version"></code></p>
+    <input type="file" id="file" accept="application/pdf" />
+    <div id="sidebar"></div>
+    <div id="viewer"><canvas id="canvas"></canvas></div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

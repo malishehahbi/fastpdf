@@ -31,7 +31,7 @@ impl HayroSession {
         Ok(())
     }
 
-    pub fn render_page(&self, page_index: usize, scale: f32) -> Result<RenderOutput> {
+    pub fn render_page(&mut self, page_index: usize, scale: f32) -> Result<RenderOutput> {
         let pages = self.pdf.pages();
         let page = pages
             .get(page_index)
@@ -43,12 +43,13 @@ impl HayroSession {
             bg_color: WHITE,
             ..Default::default()
         };
-        let cache = RenderCache::new();
-        let pixmap = render(page, &cache, &self.interp, &settings);
+        // `RenderCache` is tied to the page borrow lifetime in hayro 0.7; rebuild per call.
+        let render_cache = RenderCache::new();
+        let pixmap = render(page, &render_cache, &self.interp, &settings);
         pixmap_to_output(&pixmap)
     }
 
-    pub fn render_thumbnail(&self, page_index: usize, max_side: f32) -> Result<RenderOutput> {
+    pub fn render_thumbnail(&mut self, page_index: usize, max_side: f32) -> Result<RenderOutput> {
         let pages = self.pdf.pages();
         let page = pages
             .get(page_index)
@@ -56,28 +57,6 @@ impl HayroSession {
         let (w, h) = page.render_dimensions();
         let scale = effective_scale(max_side / w.max(h).max(1.0));
         self.render_page(page_index, scale)
-    }
-
-    pub fn render_tile(
-        &self,
-        page_index: usize,
-        scale: f32,
-        tile_x: f32,
-        tile_y: f32,
-        tile_w: f32,
-        tile_h: f32,
-    ) -> Result<RenderOutput> {
-        let full = self.render_page(page_index, scale)?;
-        crop_pixels(
-            &full.pixels,
-            full.width,
-            full.height,
-            tile_x,
-            tile_y,
-            tile_w,
-            tile_h,
-            scale,
-        )
     }
 
     pub fn text_spans(&self, page_index: usize) -> Result<Vec<TextSpan>> {
@@ -99,7 +78,7 @@ impl HayroSession {
 
 #[allow(dead_code)]
 pub fn render_bytes(source: &[u8], page_index: usize, scale: f32, password: Option<&str>) -> Result<RenderOutput> {
-    let session = HayroSession::open(source, password)?;
+    let mut session = HayroSession::open(source, password)?;
     session.render_page(page_index, scale)
 }
 
@@ -115,7 +94,7 @@ fn open_pdf(bytes: &[u8], password: Option<&str>) -> Result<Pdf> {
     }
 }
 
-fn effective_scale(scale: f32) -> f32 {
+pub fn effective_scale(scale: f32) -> f32 {
     if scale.is_finite() && scale > 0.05 {
         scale
     } else {
@@ -128,11 +107,7 @@ fn pixmap_to_output(pixmap: &Pixmap) -> Result<RenderOutput> {
     let height = pixmap.height() as u32;
     let mut pixels = pixmap.data_as_u8_slice().to_vec();
     unpremultiply_rgba(&mut pixels);
-    Ok(RenderOutput {
-        width,
-        height,
-        pixels,
-    })
+    Ok(RenderOutput::from_vec(width, height, pixels))
 }
 
 fn unpremultiply_rgba(pixels: &mut [u8]) {
@@ -149,6 +124,27 @@ fn unpremultiply_rgba(pixels: &mut [u8]) {
 }
 
 /// Crop a region in PDF points (bottom-left origin) from a full-page bitmap (top-left pixels).
+pub fn crop_render_output(
+    full: &RenderOutput,
+    tile_x: f32,
+    tile_y: f32,
+    tile_w: f32,
+    tile_h: f32,
+    scale: f32,
+) -> Result<RenderOutput> {
+    let scale = effective_scale(scale);
+    crop_pixels(
+        full.pixels.as_ref(),
+        full.width,
+        full.height,
+        tile_x,
+        tile_y,
+        tile_w,
+        tile_h,
+        scale,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn crop_pixels(
     full: &[u8],
@@ -168,11 +164,11 @@ fn crop_pixels(
     let y0 = ((page_h_pt - y0_pdf - tile_h) * scale).floor().max(0.0) as u32;
 
     if x0 >= full_w || y0 >= full_h {
-        return Ok(RenderOutput {
-            width: w,
-            height: h,
-            pixels: vec![255; (w * h * 4) as usize],
-        });
+        return Ok(RenderOutput::from_vec(
+            w,
+            h,
+            vec![255; (w * h * 4) as usize],
+        ));
     }
 
     let cw = w.min(full_w.saturating_sub(x0));
@@ -187,9 +183,5 @@ fn crop_pixels(
             out[dst_start..dst_start + len].copy_from_slice(&full[src_start..src_start + len]);
         }
     }
-    Ok(RenderOutput {
-        width: w,
-        height: h,
-        pixels: out,
-    })
+    Ok(RenderOutput::from_vec(w, h, out))
 }

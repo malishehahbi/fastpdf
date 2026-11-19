@@ -30,3 +30,4 @@ jobs:
       - run: rustup target add wasm32-unknown-unknown
       - run: npm --prefix packages/core install
       - run: npm --prefix packages/core run build
+      - run: npm --prefix packages/core test

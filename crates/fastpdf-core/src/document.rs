@@ -1,5 +1,6 @@
 use crate::annotation;
-use crate::cache::TileCache;
+use crate::cache::{page_cache_key, thumb_cache_key, tile_cache_key, TileCache};
+use crate::render::{crop_render_output, effective_scale};
 use crate::error::{FastPdfError, Result};
 use crate::form;
 use crate::info;
@@ -128,32 +129,33 @@ impl FastPdfDocument {
     }
 
     pub fn render_page(&mut self, index: u32, scale: f32) -> Result<RenderOutput> {
-        let key = format!("page-{index}-{scale}");
+        let scale = effective_scale(scale);
+        let key = page_cache_key(index, scale);
         if let Some(hit) = self.cache.get(&key) {
-            return Ok(hit.clone());
+            return Ok(hit);
         }
         self.ensure_hayro()?;
         let out = self
             .hayro
-            .as_ref()
-            .unwrap()
+            .as_mut()
+            .ok_or_else(|| FastPdfError::CorruptPdf("hayro session missing".into()))?
             .render_page(index as usize, scale)?;
-        self.cache.insert(key, out.clone());
+        self.cache.try_insert(key, out.clone());
         Ok(out)
     }
 
     pub fn render_thumbnail(&mut self, index: u32, max_side: f32) -> Result<RenderOutput> {
-        let key = format!("thumb-{index}-{max_side}");
+        let key = thumb_cache_key(index, max_side);
         if let Some(hit) = self.cache.get(&key) {
-            return Ok(hit.clone());
+            return Ok(hit);
         }
         self.ensure_hayro()?;
         let out = self
             .hayro
-            .as_ref()
-            .unwrap()
+            .as_mut()
+            .ok_or_else(|| FastPdfError::CorruptPdf("hayro session missing".into()))?
             .render_thumbnail(index as usize, max_side)?;
-        self.cache.insert(key, out.clone());
+        self.cache.try_insert(key, out.clone());
         Ok(out)
     }
 
@@ -166,20 +168,21 @@ impl FastPdfDocument {
         tile_w: f32,
         tile_h: f32,
     ) -> Result<RenderOutput> {
-        let key = format!("tile-{index}-{scale}-{tile_x}-{tile_y}-{tile_w}-{tile_h}");
-        if let Some(hit) = self.cache.get(&key) {
-            return Ok(hit.clone());
+        let scale = effective_scale(scale);
+        let tile_key = tile_cache_key(index, scale, tile_x, tile_y, tile_w, tile_h);
+        if let Some(hit) = self.cache.get(&tile_key) {
+            return Ok(hit);
         }
-        self.ensure_hayro()?;
-        let out = self.hayro.as_ref().unwrap().render_tile(
-            index as usize,
-            scale,
-            tile_x,
-            tile_y,
-            tile_w,
-            tile_h,
-        )?;
-        self.cache.insert(key, out.clone());
+
+        let page_key = page_cache_key(index, scale);
+        let full = if let Some(cached) = self.cache.peek(&page_key) {
+            cached
+        } else {
+            self.render_page(index, scale)?
+        };
+
+        let out = crop_render_output(&full, tile_x, tile_y, tile_w, tile_h, scale)?;
+        self.cache.try_insert(tile_key, out.clone());
         Ok(out)
     }
 
@@ -187,8 +190,16 @@ impl FastPdfDocument {
         self.cache.set_max_entries(n);
     }
 
+    pub fn set_max_cache_bytes(&mut self, nbytes: usize) {
+        self.cache.set_max_bytes(nbytes);
+    }
+
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+    }
+
+    pub fn cache_byte_usage(&self) -> (usize, usize) {
+        (self.cache.current_bytes(), self.cache.max_bytes())
     }
 
     fn ensure_page_layout(&mut self, index: u32) -> Result<(&[TextSpan], &PagePlain)> {

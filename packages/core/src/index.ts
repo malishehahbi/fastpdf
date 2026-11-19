@@ -121,6 +121,25 @@ export class FastPdfDocument {
     return renderResultToImageData(result);
   }
 
+  /**
+   * Rasterize a page and draw it onto `canvas`, avoiding an intermediate `ImageData` where possible.
+   */
+  async renderPageToCanvas(
+    canvas: HTMLCanvasElement,
+    pageIndex: number,
+    options: RenderOptions = {},
+  ): Promise<void> {
+    const scale = options.scale ?? 1.5;
+    const result = this.doc.renderPage(pageIndex, scale);
+    canvas.width = result.width;
+    canvas.height = result.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('2D context unavailable');
+    const imageData = ctx.createImageData(result.width, result.height);
+    imageData.data.set(new Uint8ClampedArray(result.pixels()));
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   /** Rasterize a page scaled so its longest side is at most `maxSide` points (hayro). */
   renderThumbnail(index: number, maxSide = 96): ImageData {
     const result = this.doc.renderThumbnail(index, maxSide);
@@ -169,6 +188,10 @@ export class FastPdfDocument {
 
   setMaxCacheEntries(n: number): void {
     this.doc.setMaxCacheEntries(n);
+  }
+
+  setMaxCacheBytes(bytes: number): void {
+    this.doc.setMaxCacheBytes(bytes);
   }
 
   clearCache(): void {

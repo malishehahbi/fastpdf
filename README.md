@@ -58,22 +58,24 @@ fastpdf/
 - **Node.js** 18+ (for the JS package and examples)
 - **pnpm** or **npm** (monorepo scripts)
 
-## Quick start (once Phase 0 scaffold lands)
+## Quick start
 
 ```bash
 # From repo root
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack
 
-# Build WASM + JS bindings
-cd crates/fastpdf-wasm
-wasm-pack build --target web --out-dir ../../packages/core/pkg
+# Build WASM + TypeScript package
+npm --prefix packages/core install
+npm --prefix packages/core run build
 
 # Run vanilla example
-cd ../../examples/vanilla
+cd examples/vanilla
 npm install
 npm run dev
 ```
+
+Page rendering uses **hayro** for fonts and rasterization; no `FASTPDF_FONT` or bundled TTF files are required to build `fastpdf-core`.
 
 ## Embedding in any framework
 

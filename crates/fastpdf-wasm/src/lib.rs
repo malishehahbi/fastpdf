@@ -51,7 +51,7 @@ impl From<RenderOutput> for WasmRenderResult {
         Self {
             width: r.width,
             height: r.height,
-            pixels: r.pixels,
+            pixels: r.pixels.as_ref().to_vec(),
         }
     }
 }
@@ -152,6 +152,11 @@ impl WasmDocument {
     #[wasm_bindgen(js_name = setMaxCacheEntries)]
     pub fn set_max_cache_entries(&mut self, n: usize) {
         self.inner.set_max_cache_entries(n);
+    }
+
+    #[wasm_bindgen(js_name = setMaxCacheBytes)]
+    pub fn set_max_cache_bytes(&mut self, nbytes: usize) {
+        self.inner.set_max_cache_bytes(nbytes);
     }
 
     #[wasm_bindgen(js_name = clearCache)]

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rect {
@@ -154,9 +155,23 @@ pub struct PermissionsDto {
     pub annotate: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RenderOutput {
     pub width: u32,
     pub height: u32,
-    pub pixels: Vec<u8>,
+    pub pixels: Arc<[u8]>,
+}
+
+impl RenderOutput {
+    pub fn from_vec(width: u32, height: u32, pixels: Vec<u8>) -> Self {
+        Self {
+            width,
+            height,
+            pixels: pixels.into(),
+        }
+    }
+
+    pub fn byte_len(&self) -> usize {
+        self.pixels.len()
+    }
 }

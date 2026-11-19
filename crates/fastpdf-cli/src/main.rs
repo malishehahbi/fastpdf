@@ -29,7 +29,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("outline items: {}", outline.len());
     let rendered = doc.render_page(args.page, args.scale)?;
     if let Some(out) = args.output {
-        let img = image::RgbaImage::from_raw(rendered.width, rendered.height, rendered.pixels)
+        let pixels = rendered.pixels.as_ref().to_vec();
+        let img = image::RgbaImage::from_raw(rendered.width, rendered.height, pixels)
             .ok_or("invalid render buffer")?;
         img.save(out)?;
         println!("saved render");

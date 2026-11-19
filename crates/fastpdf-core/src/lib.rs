@@ -109,6 +109,17 @@ mod tests {
     }
 
     #[test]
+    fn write_minimal_pdf_fixture() {
+        let bytes = minimal_pdf_with_outline();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/core/testdata/minimal.pdf");
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::write(path, bytes).expect("write minimal.pdf fixture");
+    }
+
+    #[test]
     fn open_outline_and_render() {
         let bytes = minimal_pdf_with_outline();
         let mut doc = FastPdfDocument::from_bytes(&bytes).expect("open");
@@ -118,7 +129,7 @@ mod tests {
         assert_eq!(outline[0].title, "Chapter 1");
         let rendered = doc.render_page(0, 1.0).unwrap();
         assert_eq!(rendered.width, 612);
-        assert_eq!(rendered.pixels.len(), (612 * 792 * 4) as usize);
+        assert_eq!(rendered.byte_len(), (612 * 792 * 4) as usize);
     }
 
     #[test]
@@ -209,5 +220,31 @@ mod tests {
             assert!(hit.snippet.contains("Page"));
         }
         assert_ne!(alpha_only[0].page_index, beta_only[0].page_index);
+    }
+
+    #[test]
+    fn tile_reuses_cached_page_buffer() {
+        use crate::cache::page_cache_key;
+        use std::sync::Arc;
+
+        let bytes = minimal_pdf_with_outline();
+        let mut doc = FastPdfDocument::from_bytes(&bytes).unwrap();
+        let scale = 1.0_f32;
+        let page = doc.render_page(0, scale).unwrap();
+        let page_ptr = Arc::as_ptr(&page.pixels);
+
+        let tile = doc
+            .render_tile(0, scale, 0.0, 0.0, 200.0, 200.0)
+            .unwrap();
+        assert!(tile.width <= page.width);
+        assert!(tile.height <= page.height);
+        assert_eq!(tile.byte_len(), (tile.width * tile.height * 4) as usize);
+
+        let key = page_cache_key(0, scale);
+        let cached = doc
+            .render_page(0, scale)
+            .expect("cached page");
+        assert_eq!(Arc::as_ptr(&cached.pixels), page_ptr);
+        let _ = key;
     }
 }

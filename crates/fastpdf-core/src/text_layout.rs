@@ -280,10 +280,38 @@ fn slice_span_rect(span: &TextSpan, char_start: usize, char_len: usize) -> Optio
     if start >= end {
         return None;
     }
+
+    // Accurate per-character slicing when advances are available.
+    if span.char_advances.len() == total {
+        let sum: f32 = span.char_advances.iter().sum();
+        if sum > 0.0 {
+            let mut pos = vec![0.0_f32; total + 1];
+            for i in 0..total {
+                pos[i + 1] = pos[i] + span.char_advances[i];
+            }
+            let (s, e) = if span.rtl {
+                (total - end, total - start)
+            } else {
+                (start, end)
+            };
+            let left_frac = pos[s] / sum;
+            let right_frac = pos[e] / sum;
+            let x_left = span.x + span.width * left_frac.min(right_frac);
+            let w = (span.width * (right_frac - left_frac).abs()).max(0.5);
+            return Some(Rect {
+                x: x_left,
+                y: span.y,
+                width: w.max(0.5),
+                height: span.height.max(0.5),
+            });
+        }
+    }
+
+    // Uniform fallback (also used for lopdf fallback spans).
     let frac0 = start as f32 / total as f32;
     let frac1 = end as f32 / total as f32;
     let x0 = span.x + span.width * frac0;
-    let w = span.width * (frac1 - frac0).max(0.5 / total as f32);
+    let w = (span.width * (frac1 - frac0)).max(0.5);
     Some(Rect {
         x: x0,
         y: span.y,
@@ -452,6 +480,19 @@ mod tests {
         let r0 = rects_for_char_range(&spans, &plain.char_map, hits[0].start, hits[0].end);
         let r1 = rects_for_char_range(&spans, &plain.char_map, hits[1].start, hits[1].end);
         assert!(r0[0].x < r1[0].x);
+    }
+
+    #[test]
+    fn slice_span_rect_uses_char_advances() {
+        let mut span = span_at("iW", 0.0, 10.0, 120.0);
+        span.char_advances = vec![20.0, 100.0];
+        let plain = build_plain_from_spans(&[span.clone()]);
+        let rects = rects_for_char_range(&[span], &plain.char_map, 0, 1);
+        assert_eq!(rects.len(), 1);
+        assert!(rects[0].width < 30.0, "width={}", rects[0].width);
+        let rects2 = rects_for_char_range(&[span_at("iW", 0.0, 10.0, 120.0)], &plain.char_map, 0, 1);
+        // uniform fallback differs
+        assert!(rects2[0].width > rects[0].width);
     }
 
     #[test]

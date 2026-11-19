@@ -121,6 +121,10 @@ pub struct TextSpan {
     pub line_break_before: bool,
     #[serde(default)]
     pub rtl: bool,
+    /// Per-character advance widths in view/PDF horizontal units. Empty when
+    /// unavailable (e.g. fallback spans).
+    #[serde(default)]
+    pub char_advances: Vec<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -61,6 +61,44 @@ pub struct LinkDto {
     pub page_index: Option<u32>,
 }
 
+/// `span_index` value in [`CharMapEntry`] for synthetic space/newline characters in [`PagePlain`].
+pub const SYNTHETIC_CHAR_MAP: usize = usize::MAX;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CharMapEntry {
+    pub span_index: usize,
+    pub offset_in_span: u32,
+}
+
+impl CharMapEntry {
+    pub const fn synthetic() -> Self {
+        Self {
+            span_index: SYNTHETIC_CHAR_MAP,
+            offset_in_span: 0,
+        }
+    }
+
+    pub fn is_synthetic(self) -> bool {
+        self.span_index == SYNTHETIC_CHAR_MAP
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextLine {
+    pub span_indices: Vec<usize>,
+    pub rtl: bool,
+    pub column: u32,
+    pub y_top: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PagePlain {
+    pub text: String,
+    pub char_map: Vec<CharMapEntry>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextSpan {

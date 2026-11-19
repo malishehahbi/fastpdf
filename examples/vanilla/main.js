@@ -84,29 +84,31 @@ function paintHighlights() {
 }
 
 /**
- * @param {import('@fastpdf/core').TextSpan[]} spans
+ * @param {import('@fastpdf/core').TextSpan[]} spans — reading order from core layout
+ * @returns {{ yTop: number; rtl: boolean; spans: import('@fastpdf/core').TextSpan[] }[]}
  */
-function groupLines(spans) {
-  const sorted = [...spans].sort((a, b) => {
-    const dy = (a.yTop ?? 0) - (b.yTop ?? 0);
-    if (Math.abs(dy) > 2) return dy;
-    return a.x - b.x;
-  });
+function linesFromLayout(spans) {
   /** @type {{ yTop: number; rtl: boolean; spans: import('@fastpdf/core').TextSpan[] }[]} */
   const lines = [];
-  for (const s of sorted) {
-    const yTop = s.yTop ?? 0;
-    const lh = s.fontSize || s.height || 12;
-    const last = lines[lines.length - 1];
-    if (!last || Math.abs(last.yTop - yTop) > lh * 0.45) {
-      lines.push({ yTop, rtl: !!s.rtl, spans: [s] });
-    } else {
-      last.spans.push(s);
-      if (s.rtl) last.rtl = true;
+  /** @type {import('@fastpdf/core').TextSpan[]} */
+  let current = [];
+  for (const s of spans) {
+    if (s.lineBreakBefore && current.length) {
+      lines.push({
+        yTop: current[0].yTop ?? 0,
+        rtl: !!current[0].rtl,
+        spans: current,
+      });
+      current = [];
     }
+    current.push(s);
   }
-  for (const line of lines) {
-    line.spans.sort((a, b) => (line.rtl ? b.x - a.x : a.x - b.x));
+  if (current.length) {
+    lines.push({
+      yTop: current[0].yTop ?? 0,
+      rtl: !!current[0].rtl,
+      spans: current,
+    });
   }
   return lines;
 }
@@ -133,7 +135,7 @@ function buildTextLayer(spans) {
   textLayer.replaceChildren();
   textLayer.style.width = `${canvas.width}px`;
   textLayer.style.height = `${canvas.height}px`;
-  for (const line of groupLines(spans)) {
+  for (const line of linesFromLayout(spans)) {
     let text = '';
     for (const s of line.spans) {
       if (s.spaceBefore) text += ' ';
@@ -193,7 +195,7 @@ async function renderCurrent() {
     canvas.style.cursor = 'default';
     canvas.dataset.links = JSON.stringify(links);
 
-    status.textContent = `Rendered ${image.width}×${image.height} px · ${groupLines(spans).length} text lines`;
+    status.textContent = `Rendered ${image.width}×${image.height} px · ${linesFromLayout(spans).length} text lines`;
     updatePager();
   } catch (err) {
     console.error(err);

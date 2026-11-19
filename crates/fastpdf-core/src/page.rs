@@ -41,6 +41,7 @@ pub fn media_box_size(doc: &Document, page_id: ObjectId) -> Result<(f32, f32)> {
     page_box(doc, page_id).map(|r| (r.width, r.height))
 }
 
+#[allow(dead_code)]
 pub fn page_rect(doc: &Document, page_id: ObjectId) -> Result<Rect> {
     page_box(doc, page_id)
 }
@@ -126,8 +127,8 @@ pub fn resolve_page_labels(doc: &Document, pages: &BTreeMap<u32, ObjectId>) -> B
                 .and_then(decode_object_text_string)
                 .unwrap_or_default();
             let style = spec.get(b"S").ok().and_then(|o| o.as_name().ok());
-            let mut n = spec.get(b"St").ok().and_then(|o| o.as_i64().ok()).unwrap_or(1) as u32;
-            for (idx, _) in pages.iter().skip(start as usize) {
+            let start_n = spec.get(b"St").ok().and_then(|o| o.as_i64().ok()).unwrap_or(1) as u32;
+            for (n, (idx, _)) in (start_n..).zip(pages.iter().skip(start as usize)) {
                 let label = match style {
                     Some(b"D") => format!("{n}"),
                     Some(b"R") => roman(n),
@@ -137,7 +138,6 @@ pub fn resolve_page_labels(doc: &Document, pages: &BTreeMap<u32, ObjectId>) -> B
                     _ => format!("{prefix}{n}"),
                 };
                 labels.insert(*idx, if prefix.is_empty() { label } else { format!("{prefix}{label}") });
-                n += 1;
             }
         }
         i += 2;

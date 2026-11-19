@@ -52,6 +52,7 @@ fn utf16_le(rest: &[u8]) -> String {
     String::from_utf16_lossy(&units)
 }
 
+#[allow(dead_code)]
 pub fn cmyk_to_rgb(c: f32, m: f32, y: f32, k: f32) -> [f32; 3] {
     [
         (1.0 - c) * (1.0 - k),

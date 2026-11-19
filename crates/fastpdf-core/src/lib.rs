@@ -127,5 +127,87 @@ mod tests {
         let mut doc = FastPdfDocument::from_bytes(&bytes).unwrap();
         let hits = doc.search("FastPDF").unwrap();
         assert!(!hits.is_empty());
+        assert!(!hits[0].rects.is_empty() || hits[0].snippet.contains("FastPDF"));
+    }
+
+    fn two_page_pdf() -> Vec<u8> {
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+        let page_a = doc.new_object_id();
+        let page_b = doc.new_object_id();
+        let catalog_id = doc.new_object_id();
+
+        for (page_id, label) in [(page_a, "AlphaPage"), (page_b, "BetaPage")] {
+            let content = Stream::new(
+                dictionary! { "Length" => Object::Integer(64) },
+                format!("BT /F1 24 Tf 100 700 Td ({label}) Tj ET", label = label).into_bytes(),
+            );
+            let content_id = doc.add_object(Object::Stream(content));
+            doc.objects.insert(
+                page_id,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Page",
+                    "Parent" => Object::Reference(pages_id),
+                    "MediaBox" => Object::Array(vec![
+                        Object::Real(0.0),
+                        Object::Real(0.0),
+                        Object::Real(612.0),
+                        Object::Real(792.0),
+                    ]),
+                    "Resources" => Object::Dictionary(dictionary! {
+                        "Font" => Object::Dictionary(dictionary! {
+                            "F1" => Object::Dictionary(dictionary! {
+                                "Type" => Object::Name(b"Font".to_vec()),
+                                "Subtype" => Object::Name(b"Type1".to_vec()),
+                                "BaseFont" => Object::Name(b"Helvetica".to_vec()),
+                            }),
+                        }),
+                    }),
+                    "Contents" => Object::Reference(content_id),
+                }),
+            );
+        }
+
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Count" => 2,
+                "Kids" => vec![Object::Reference(page_a), Object::Reference(page_b)],
+            }),
+        );
+        doc.objects.insert(
+            catalog_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Catalog",
+                "Pages" => Object::Reference(pages_id),
+            }),
+        );
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+        let mut buf = Vec::new();
+        doc.save_to(&mut buf).unwrap();
+        buf
+    }
+
+    #[test]
+    fn lazy_search_per_page_rects() {
+        let bytes = two_page_pdf();
+        let mut doc = FastPdfDocument::from_bytes(&bytes).unwrap();
+        assert_eq!(doc.page_count(), 2);
+
+        let beta_only = doc.search_page(1, "Beta").unwrap();
+        assert_eq!(beta_only.len(), 1);
+        assert_eq!(beta_only[0].page_index, 1);
+
+        let alpha_only = doc.search_page(0, "Alpha").unwrap();
+        assert_eq!(alpha_only.len(), 1);
+        assert_eq!(alpha_only[0].page_index, 0);
+
+        let all = doc.search("Page").unwrap();
+        assert_eq!(all.len(), 2);
+        for hit in &all {
+            assert!(hit.snippet.contains("Page"));
+        }
+        assert_ne!(alpha_only[0].page_index, beta_only[0].page_index);
     }
 }

@@ -24,8 +24,9 @@ pub struct FastPdfDocument {
     pub(crate) pages: BTreeMap<u32, ObjectId>,
     labels: BTreeMap<u32, String>,
     cache: TileCache,
-    pages_text: Option<Vec<(u32, String)>>,
     span_cache: BTreeMap<u32, Vec<TextSpan>>,
+    plain_cache: BTreeMap<u32, PagePlain>,
+    line_cache: BTreeMap<u32, Vec<TextLine>>,
 }
 
 impl FastPdfDocument {
@@ -57,7 +58,8 @@ impl FastPdfDocument {
         self.hayro = None;
         self.cache.clear();
         self.span_cache.clear();
-        self.pages_text = None;
+        self.plain_cache.clear();
+        self.line_cache.clear();
     }
 
     pub fn page_view_size(&mut self, index: u32) -> Result<(f32, f32)> {
@@ -89,8 +91,9 @@ impl FastPdfDocument {
             pages,
             labels,
             cache: TileCache::new(32),
-            pages_text: None,
             span_cache: BTreeMap::new(),
+            plain_cache: BTreeMap::new(),
+            line_cache: BTreeMap::new(),
         })
     }
 
@@ -188,70 +191,93 @@ impl FastPdfDocument {
         self.cache.clear();
     }
 
-    pub fn text_spans(&mut self, index: u32) -> Result<Vec<TextSpan>> {
-        if let Some(cached) = self.span_cache.get(&index) {
-            return Ok(cached.clone());
-        }
-        self.ensure_hayro()?;
-        let mut spans = if let Some(session) = &self.hayro {
-            let spans = session.text_spans(index as usize)?;
-            if !spans.is_empty() {
-                spans
+    fn ensure_page_layout(&mut self, index: u32) -> Result<(&[TextSpan], &PagePlain)> {
+        if !self.span_cache.contains_key(&index) {
+            self.ensure_hayro()?;
+            let mut spans = if let Some(session) = &self.hayro {
+                let spans = session.text_spans(index as usize)?;
+                if !spans.is_empty() {
+                    spans
+                } else {
+                    let id = page::page_id(&self.pages, index)?;
+                    text::extract_text_spans(&self.doc, id)?
+                }
             } else {
                 let id = page::page_id(&self.pages, index)?;
                 text::extract_text_spans(&self.doc, id)?
+            };
+            if spans.is_empty() {
+                let id = page::page_id(&self.pages, index)?;
+                spans = text::extract_text_spans(&self.doc, id)?;
             }
-        } else {
-            let id = page::page_id(&self.pages, index)?;
-            text::extract_text_spans(&self.doc, id)?
-        };
-        crate::text_layout::annotate_layout(&mut spans);
-        self.span_cache.insert(index, spans.clone());
-        Ok(spans)
+            if spans.is_empty() {
+                let id = page::page_id(&self.pages, index)?;
+                let fallback = text::extract_page_text(&self.doc, id)?;
+                self.plain_cache.insert(
+                    index,
+                    PagePlain {
+                        text: fallback,
+                        char_map: vec![],
+                    },
+                );
+                self.span_cache.insert(index, spans);
+            } else {
+                let layout = crate::text_layout::build_page_layout(&mut spans);
+                self.plain_cache.insert(index, layout.plain);
+                self.line_cache.insert(index, layout.lines);
+                self.span_cache.insert(index, spans);
+            }
+        }
+        let spans = self
+            .span_cache
+            .get(&index)
+            .ok_or(FastPdfError::PageOutOfRange(index))?;
+        let plain = self
+            .plain_cache
+            .get(&index)
+            .ok_or(FastPdfError::PageOutOfRange(index))?;
+        Ok((spans.as_slice(), plain))
     }
 
-    fn lopdf_page_text(&self, index: u32) -> Result<String> {
-        let id = page::page_id(&self.pages, index)?;
-        text::extract_page_text(&self.doc, id)
+    pub fn text_spans(&mut self, index: u32) -> Result<Vec<TextSpan>> {
+        let (spans, _) = self.ensure_page_layout(index)?;
+        Ok(spans.to_vec())
     }
 
     pub fn page_text(&mut self, index: u32) -> Result<String> {
-        let spans = self.text_spans(index)?;
-        if spans.is_empty() {
-            return self.lopdf_page_text(index);
-        }
-        Ok(crate::text_layout::plain_text(&spans))
+        let (_, plain) = self.ensure_page_layout(index)?;
+        Ok(plain.text.clone())
     }
 
-    fn ensure_pages_text(&mut self) -> Result<&[(u32, String)]> {
-        if self.pages_text.is_none() {
-            let mut out = Vec::with_capacity(self.pages.len());
-            let indices: Vec<u32> = self.pages.keys().copied().collect();
-            for idx in indices {
-                out.push((idx, self.page_text(idx)?));
-            }
-            self.pages_text = Some(out);
+    pub fn text_lines(&mut self, index: u32) -> Result<Vec<TextLine>> {
+        self.ensure_page_layout(index)?;
+        self.line_cache
+            .get(&index)
+            .cloned()
+            .ok_or(FastPdfError::PageOutOfRange(index))
+    }
+
+    pub fn search_page(&mut self, page_index: u32, query: &str) -> Result<Vec<SearchMatch>> {
+        if query.is_empty() {
+            return Ok(vec![]);
         }
-        Ok(self.pages_text.as_ref().unwrap())
+        let (spans, plain) = self.ensure_page_layout(page_index)?;
+        Ok(search::search_page_plain(
+            page_index,
+            plain,
+            spans,
+            query,
+        ))
     }
 
     pub fn search(&mut self, query: &str) -> Result<Vec<SearchMatch>> {
-        let pages_text: Vec<(u32, String)> = self.ensure_pages_text()?.to_vec();
-        let mut hits = search::search_pages(&pages_text, query);
         if query.is_empty() {
-            return Ok(hits);
+            return Ok(vec![]);
         }
-        let pages: std::collections::BTreeSet<u32> = hits.iter().map(|h| h.page_index).collect();
-        let mut span_by_page = BTreeMap::new();
-        for p in pages {
-            if let Ok(spans) = self.text_spans(p) {
-                span_by_page.insert(p, spans);
-            }
-        }
-        for hit in &mut hits {
-            if let Some(spans) = span_by_page.get(&hit.page_index) {
-                hit.rects = search::rects_for_query(spans, query);
-            }
+        let indices: Vec<u32> = self.pages.keys().copied().collect();
+        let mut hits = Vec::new();
+        for idx in indices {
+            hits.extend(self.search_page(idx, query)?);
         }
         Ok(hits)
     }
@@ -292,7 +318,9 @@ impl FastPdfDocument {
         contents: Option<&str>,
     ) -> Result<u32> {
         annotation::add_highlight(&mut self.doc, &self.pages, page_index, quad, contents)?;
-        self.pages_text = None;
+        self.plain_cache.remove(&page_index);
+        self.span_cache.remove(&page_index);
+        self.line_cache.remove(&page_index);
         self.invalidate_render();
         Ok(0)
     }
@@ -318,7 +346,6 @@ impl FastPdfDocument {
         self.doc = doc;
         self.pages = Self::normalize_pages(self.doc.get_pages());
         self.labels = page::resolve_page_labels(&self.doc, &self.pages);
-        self.pages_text = None;
         self.invalidate_render();
         Ok(())
     }

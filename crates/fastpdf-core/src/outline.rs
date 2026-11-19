@@ -40,7 +40,7 @@ pub fn build_outline(doc: &Document, pages: &BTreeMap<u32, ObjectId>) -> Result<
                 .ok()
                 .and_then(decode_object_text_string)
                 .unwrap_or_default();
-            let page_index = resolve_dest_page(doc, &item, pages);
+            let page_index = resolve_dest_page(doc, item, pages);
             let mut children = Vec::new();
             if let Ok(Object::Reference(first_child)) = item.get(b"First") {
                 children = collect_outline_children(doc, *first_child, pages)?;
@@ -74,7 +74,7 @@ fn collect_outline_children(
                 .ok()
                 .and_then(decode_object_text_string)
                 .unwrap_or_default();
-            let page_index = resolve_dest_page(doc, &item, pages);
+            let page_index = resolve_dest_page(doc, item, pages);
             let mut children = Vec::new();
             if let Ok(Object::Reference(first_child)) = item.get(b"First") {
                 children = collect_outline_children(doc, *first_child, pages)?;
@@ -119,7 +119,7 @@ fn resolve_dest_page(
 }
 
 fn dest_to_page_index(
-    doc: &Document,
+    _doc: &Document,
     dest: &Object,
     pages: &BTreeMap<u32, ObjectId>,
 ) -> Option<u32> {

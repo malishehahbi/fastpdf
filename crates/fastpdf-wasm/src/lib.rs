@@ -171,6 +171,15 @@ impl WasmDocument {
         serde_wasm_bindgen::to_value(&hits).map_err(|e| JsError::new(&e.to_string()))
     }
 
+    #[wasm_bindgen(js_name = searchPage)]
+    pub fn search_page(&mut self, page_index: u32, query: &str) -> Result<JsValue, JsError> {
+        let hits = self
+            .inner
+            .search_page(page_index, query)
+            .map_err(to_js_err)?;
+        serde_wasm_bindgen::to_value(&hits).map_err(|e| JsError::new(&e.to_string()))
+    }
+
     #[wasm_bindgen(js_name = getAnnotations)]
     pub fn get_annotations(&self, index: u32) -> Result<JsValue, JsError> {
         let a = self.inner.annotations(index).map_err(to_js_err)?;

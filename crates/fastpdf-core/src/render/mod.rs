@@ -25,6 +25,7 @@ impl HayroSession {
         })
     }
 
+    #[allow(dead_code)]
     pub fn reload(&mut self, source: &[u8], password: Option<&str>) -> Result<()> {
         self.pdf = open_pdf(source, password)?;
         Ok(())
@@ -43,7 +44,7 @@ impl HayroSession {
             ..Default::default()
         };
         let cache = RenderCache::new();
-        let pixmap = render(&page, &cache, &self.interp, &settings);
+        let pixmap = render(page, &cache, &self.interp, &settings);
         pixmap_to_output(&pixmap)
     }
 
@@ -84,7 +85,7 @@ impl HayroSession {
         let page = pages
             .get(page_index)
             .ok_or(FastPdfError::PageOutOfRange(page_index as u32))?;
-        Ok(text_extract::extract_page_spans(&page, &self.interp))
+        Ok(text_extract::extract_page_spans(page, &self.interp))
     }
 
     pub fn view_dimensions(&self, page_index: usize) -> Result<(f32, f32)> {
@@ -96,6 +97,7 @@ impl HayroSession {
     }
 }
 
+#[allow(dead_code)]
 pub fn render_bytes(source: &[u8], page_index: usize, scale: f32, password: Option<&str>) -> Result<RenderOutput> {
     let session = HayroSession::open(source, password)?;
     session.render_page(page_index, scale)
@@ -147,6 +149,7 @@ fn unpremultiply_rgba(pixels: &mut [u8]) {
 }
 
 /// Crop a region in PDF points (bottom-left origin) from a full-page bitmap (top-left pixels).
+#[allow(clippy::too_many_arguments)]
 fn crop_pixels(
     full: &[u8],
     full_w: u32,

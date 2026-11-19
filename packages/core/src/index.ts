@@ -143,6 +143,10 @@ export class FastPdfDocument {
     return this.doc.search(query) as SearchMatch[];
   }
 
+  searchPage(pageIndex: number, query: string): SearchMatch[] {
+    return this.doc.searchPage(pageIndex, query) as SearchMatch[];
+  }
+
   getFormFields(): unknown[] {
     return this.doc.getFormFields() as unknown[];
   }

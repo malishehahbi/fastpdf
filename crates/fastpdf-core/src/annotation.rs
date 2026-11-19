@@ -30,7 +30,7 @@ pub fn list_annotations(
     let mut out = Vec::new();
     for rid in refs {
         if let Ok(ann) = doc.get_dictionary(rid) {
-            if let Some(dto) = annotation_from_dict(doc, &ann, pages) {
+            if let Some(dto) = annotation_from_dict(doc, ann, pages) {
                 out.push(dto);
             }
         }
@@ -198,7 +198,7 @@ fn action_uri(doc: &Document, action: &Object) -> Option<String> {
     }
 }
 
-fn dest_page(doc: &Document, dest: &Object, pages: &BTreeMap<u32, ObjectId>) -> Option<u32> {
+fn dest_page(_doc: &Document, dest: &Object, pages: &BTreeMap<u32, ObjectId>) -> Option<u32> {
     let page_ref = match dest {
         Object::Array(arr) if !arr.is_empty() => arr[0].as_reference().ok(),
         Object::Reference(r) => Some(*r),

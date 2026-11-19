@@ -3,7 +3,6 @@ use crate::pdf_num::object_as_f32;
 use crate::types::TextSpan;
 use lopdf::content::{Content, Operation};
 use lopdf::{Document, Object, ObjectId};
-use std::collections::BTreeMap;
 
 #[derive(Clone, Copy)]
 struct TextState {
@@ -82,15 +81,6 @@ pub fn extract_text_spans(doc: &Document, page_id: ObjectId) -> Result<Vec<TextS
         }
     }
     Ok(spans)
-}
-
-pub fn all_pages_text(doc: &Document, pages: &BTreeMap<u32, ObjectId>) -> Result<Vec<(u32, String)>> {
-    let mut out = Vec::new();
-    for (idx, id) in pages {
-        let text = extract_page_text(doc, *id)?;
-        out.push((*idx, text));
-    }
-    Ok(out)
 }
 
 fn push_span(spans: &mut Vec<TextSpan>, text: &str, ts: &TextState, ctm: [f32; 6]) {
